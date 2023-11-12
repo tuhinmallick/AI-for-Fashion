@@ -14,7 +14,7 @@ def load_from_numpy_dict(model, numpy_dict, prefix='', examples=None):
     '''
     if prefix:
         if not prefix.endswith('.'):
-            prefix = prefix + '.'
+            prefix = f'{prefix}.'
         numpy_dict = PrefixSubDict(numpy_dict, prefix)
     if examples is None:
         exampels = model.state_dict()
@@ -29,7 +29,7 @@ def save_to_numpy_dict(model, numpy_dict, prefix=''):
     '''
     if prefix:
         if not prefix.endswith('.'):
-            prefix = prefix + '.'
+            prefix = f'{prefix}.'
     for k, v in model.numpy_dict().items():
         if isinstance(v, torch.Tensor):
             v = v.detach().cpu().numpy()
@@ -91,8 +91,9 @@ class PrefixSubDict(MutableMapping):
     def __cached_keys(self):
         if self._cached_keys is None:
             plen = len(self.prefix)
-            self._cached_keys = list(k[plen:] for k in self.data
-                    if k.startswith(self.prefix))
+            self._cached_keys = [
+                k[plen:] for k in self.data if k.startswith(self.prefix)
+            ]
         return self._cached_keys
     def __iter__(self):
         return iter(self.__cached_keys())

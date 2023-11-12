@@ -52,7 +52,7 @@ def convert_to_images(obj):
     obj = np.clip(((obj + 1) / 2.0) * 256, 0, 255)
 
     img = []
-    for i, out in enumerate(obj):
+    for out in obj:
         out_array = np.asarray(np.uint8(out), dtype=np.uint8)
         img.append(PIL.Image.fromarray(out_array))
     return img
@@ -69,7 +69,7 @@ def save_as_images(obj, file_name='output'):
 
     for i, out in enumerate(img):
         current_file_name = file_name + '_%d.png' % i
-        logger.info("Saving image to {}".format(current_file_name))
+        logger.info(f"Saving image to {current_file_name}")
         out.save(current_file_name, 'png')
 
 
@@ -200,14 +200,18 @@ def one_hot_from_names(class_name_or_list, batch_size=1):
         if not original_synsets:
             return None
 
-        possible_synsets = list(filter(lambda s: s.offset() in IMAGENET, original_synsets))
-        if possible_synsets:
+        if possible_synsets := list(
+            filter(lambda s: s.offset() in IMAGENET, original_synsets)
+        ):
             classes.append(IMAGENET[possible_synsets[0].offset()])
         else:
             # try hypernyms and hyponyms
-            possible_synsets = sum([s.hypernyms() + s.hyponyms() for s in original_synsets], [])
-            possible_synsets = list(filter(lambda s: s.offset() in IMAGENET, possible_synsets))
-            if possible_synsets:
+            possible_synsets = sum(
+                (s.hypernyms() + s.hyponyms() for s in original_synsets), []
+            )
+            if possible_synsets := list(
+                filter(lambda s: s.offset() in IMAGENET, possible_synsets)
+            ):
                 classes.append(IMAGENET[possible_synsets[0].offset()])
 
     return one_hot_from_int(classes, batch_size=batch_size)

@@ -13,17 +13,20 @@ def autoimport_eval(term):
         def __getattr__(self, key):
             return self.__d__[key]
 
+
+
     class AutoImportDict(defaultdict):
         def __init__(self, wrapped=None, parent=None):
             super().__init__()
             self.wrapped = wrapped
             self.parent = parent
+
         def __missing__(self, key):
             if self.wrapped is not None:
                 if key in self.wrapped:
                     return self.wrapped[key]
             if self.parent is not None:
-                key = self.parent + '.' + key
+                key = f'{self.parent}.{key}'
             if key in __builtins__:
                 return __builtins__[key]
             mdl = import_module(key)
@@ -32,6 +35,7 @@ def autoimport_eval(term):
                 return DictNamespace(
                         AutoImportDict(wrapped=mdl.__dict__, parent=key))
             return mdl
+
 
     return eval(term, {}, AutoImportDict())
 

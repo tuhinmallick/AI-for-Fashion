@@ -101,11 +101,11 @@ def load_named_components(path, class_name):
             if data['latent_space'] != model.latent_space_name():
                 print('Skipping', dump_path, '(wrong latent space)')
                 continue
-            
+
             selected.append(data)
             print('Using', dump_path)
 
-    if len(selected) == 0:
+    if not selected:
         raise RuntimeError('No valid components in given path.')
 
     comp_dict = { k : [] for k in ['X_comp', 'Z_comp', 'X_stdev', 'Z_stdev', 'names', 'types', 'layer_names', 'ranges', 'latent_types'] }
@@ -124,7 +124,7 @@ def load_named_components(path, class_name):
         components.layer_names.append(d['decomposition']['layer']) # only for act
         components.ranges.append((s, e))
         components.latent_types.append(d['latent_space']) # W or Z
-    
+
     use_named_latents = True
     print('Loaded named components')
 
@@ -170,7 +170,7 @@ def reset_sliders(zero_on_failure=True):
     # Not orthogonal: need to solve least-norm problem
     # Not batch size 1: one set of sliders not enough
     # Not principal components: unsupported format
-    is_ortho = not (mode == 'latent' and model.latent_space_name() == 'Z')
+    is_ortho = mode != 'latent' or model.latent_space_name() != 'Z'
     is_single = state.z.shape[0] == 1
     is_pcs = not use_named_latents
 
@@ -198,7 +198,7 @@ def reset_sliders(zero_on_failure=True):
     coords = project_ortho(val - mean, comp)
     offset = torch.sum(coords[:n_sliders] * comp[:n_sliders], dim=0)
     scaled_coords = (coords.view(-1) / stdev).detach().cpu().numpy()
-    
+
     # Part representable by sliders
     if mode == 'activation':
         state.act_slider_offset = offset
@@ -244,10 +244,12 @@ def setup_ui():
     # Choose range where latents are modified
     def set_min(val):
         ui_state.edit_layer_start.set(min(int(val), ui_state.edit_layer_end.get()))
+
     def set_max(val):
         ui_state.edit_layer_end.set(max(int(val), ui_state.edit_layer_start.get()))
+
     max_latent_idx = model.get_max_latents() - 1
-    
+
     if not use_named_latents:
         slider_min = tk.Scale(toolbar, command=set_min, variable=ui_state.edit_layer_start,
             label='Layer start', from_=0, to=max_latent_idx, orient=tk.HORIZONTAL).pack(fill="x")
@@ -268,6 +270,7 @@ def setup_ui():
     def onCanvasConfigure(event):
         canvas.itemconfigure("all", width=event.width)
         canvas.configure(scrollregion=canvas.bbox("all"))
+
     canvas.bind("<Configure>", onCanvasConfigure)
 
     def on_scroll(event):
@@ -287,7 +290,9 @@ def setup_ui():
         scale.pack(fill=tk.X, side=tk.LEFT, expand=True)
         ui_state.scales.append(scale) # for changing label later
         if not use_named_latents:
-            tk.Button(inner, text=f"Save", command=partial(export_direction, i, inner)).pack(fill=tk.Y, side=tk.RIGHT)
+            tk.Button(
+                inner, text="Save", command=partial(export_direction, i, inner)
+            ).pack(fill=tk.Y, side=tk.RIGHT)
         inner.pack(fill=tk.X)
 
     outer_frame.pack(fill="both", expand=True, pady=0)
@@ -299,7 +304,7 @@ def setup_ui():
 
     tk.Scale(toolbar, variable=ui_state.batch_size, from_=1, to=9,
         resolution=1, orient=tk.HORIZONTAL, label='Batch size').pack(fill="x")
-    
+
     # Output class
     frame = tk.Frame(toolbar)
     tk.Label(frame, text="Class name").pack(fill="x", side="left")
@@ -311,12 +316,13 @@ def setup_ui():
         seed_str = ui_state.random_seed.get()
         if seed_str.isdigit():
             resample_latent(int(seed_str))
+
     frame = tk.Frame(toolbar)
     tk.Label(frame, text="Seed").pack(fill="x", side="left")
     tk.Entry(frame, textvariable=ui_state.random_seed, width=12).pack(fill="x", side="left", expand=True, padx=2)
     tk.Button(frame, text="Update", command=update_seed).pack(fill="y", side="right", padx=3)
     frame.pack(fill=tk.X, pady=3)
-    
+
     # Get new latent or new components
     tk.Button(toolbar, text="Resample latent", command=partial(resample_latent, None, False)).pack(anchor=tk.CENTER, fill=tk.X, padx=4, pady=4)
     #tk.Button(toolbar, text="Recompute", command=recompute_components).pack(anchor=tk.CENTER, fill=tk.X)
@@ -630,8 +636,6 @@ def handle_keypress(code):
         shutdown()
     elif code == 65360: # HOME
         reset_sliders()
-    elif code == 114: # R
-        pass #reset_sliders()
     
 def shutdown():
     global pending_close

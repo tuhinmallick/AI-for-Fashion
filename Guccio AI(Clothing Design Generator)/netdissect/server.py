@@ -142,15 +142,16 @@ def load_projects(directory):
         elif root.count(os.path.sep) >= search_depth:
             del dirs[:]
     for p_dir in project_dirs:
-        print('Loading %s' % os.path.join(p_dir, CONFIG_FILE_NAME))
+        print(f'Loading {os.path.join(p_dir, CONFIG_FILE_NAME)}')
         with open(os.path.join(p_dir, CONFIG_FILE_NAME), 'r') as jf:
             config = EasyDict(json.load(jf))
             dh_id = os.path.split(p_dir)[1]
             projects[dh_id] = DissectionProject(
-                    config=config,
-                    project_dir=p_dir,
-                    path_url='data/' + os.path.relpath(p_dir, directory),
-                    public_host=args.public_host)
+                config=config,
+                project_dir=p_dir,
+                path_url=f'data/{os.path.relpath(p_dir, directory)}',
+                public_host=args.public_host,
+            )
 
 app.add_api('server.yaml')
 
@@ -170,7 +171,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     for d in [args.data, args.client]:
         if not os.path.isdir(d):
-            print('No directory %s' % d)
+            print(f'No directory {d}')
             sys.exit(1)
     args.data = os.path.abspath(args.data)
     args.client = os.path.abspath(args.client)

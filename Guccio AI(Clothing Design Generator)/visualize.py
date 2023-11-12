@@ -50,8 +50,8 @@ def make_mp4(imgs, duration_secs, outname):
     FFMPEG_BIN = shutil.which("ffmpeg")
     assert FFMPEG_BIN is not None, 'ffmpeg not found, install with "conda install -c conda-forge ffmpeg"'
     assert len(imgs[0].shape) == 3, 'Invalid shape of frame data'
-    
-    resolution = imgs[0].shape[0:2]
+
+    resolution = imgs[0].shape[:2]
     fps = int(len(imgs) / duration_secs)
 
     command = [ FFMPEG_BIN,
@@ -67,7 +67,7 @@ def make_mp4(imgs, duration_secs, outname):
         '-preset', 'slow',
         '-crf', '17',
         str(Path(outname).with_suffix('.mp4')) ]
-    
+
     frame_data = np.concatenate([(x * 255).astype(np.uint8).reshape(-1) for x in imgs])
     with sp.Popen(command, stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE) as p:
         ret = p.communicate(frame_data.tobytes())
@@ -84,28 +84,28 @@ def make_grid(latent, lat_mean, lat_comp, lat_stdev, act_mean, act_comp, act_std
 
     rows = []
     for r in range(n_rows):
-        curr_row = []
         out_batch = create_strip_centered(inst, edit_type, layer_key, [latent],
             act_comp[r], lat_comp[r], act_stdev[r], lat_stdev[r], act_mean, lat_mean, scale, 0, -1, n_cols)[0]
-        for i, img in enumerate(out_batch):
-            curr_row.append(('c{}_{:.2f}'.format(r, x_range[i]), img))
-
+        curr_row = [
+            ('c{}_{:.2f}'.format(r, x_range[i]), img)
+            for i, img in enumerate(out_batch)
+        ]
         rows.append(curr_row[:n_cols])
 
     inst.remove_edits()
-    
+
     if make_plots:
         # If more rows than columns, make several blocks side by side
         n_blocks = 2 if n_rows > n_cols else 1
-        
+
         for r, data in enumerate(rows):
             # Add white borders
             imgs = pad_frames([img for _, img in data]) 
-            
+
             coord = ((r * n_blocks) % n_rows) + ((r * n_blocks) // n_rows)
             plt.subplot(n_rows//n_blocks, n_blocks, 1 + coord)
             plt.imshow(np.hstack(imgs))
-            
+
             # Custom x-axis labels
             W = imgs[0].shape[1] # image width
             P = imgs[1].shape[1] # padding width

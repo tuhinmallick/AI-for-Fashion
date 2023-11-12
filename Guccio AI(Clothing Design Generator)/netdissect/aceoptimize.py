@@ -110,7 +110,7 @@ def run_command(args):
         os.path.isfile(os.path.join(cachedir, 'snapshots', 'epoch-%d.npy' % (
             args.train_epochs - 1))) and
         os.path.isfile(os.path.join(cachedir, 'report.json'))):
-        print('%s already done' % cachedir)
+        print(f'{cachedir} already done')
         sys.exit(0)
 
     os.makedirs(cachedir, exist_ok=True)
@@ -185,9 +185,9 @@ def draw_heatmap(output_filename, data, size=256):
     ax.imshow(data, cmap='hot', aspect='equal', interpolation='nearest',
               vmin=-1, vmax=1)
     canvas.draw()       # draw the canvas, cache the renderer
-    image = numpy.fromstring(canvas.tostring_rgb(), dtype='uint8').reshape(
-            (size, size, 3))
-    return image
+    return numpy.fromstring(canvas.tostring_rgb(), dtype='uint8').reshape(
+        (size, size, 3)
+    )
 
 def compute_present_locations(args, corpus, cache_filename,
         model, segmenter, classnum, full_sample):
@@ -417,12 +417,10 @@ def visualize_training_locations(args, corpus, cachedir, model):
                     corpus.candidate_sample,
                     corpus.candidate_location,
                     corpus.candidate_indices)]:
-            for [zbatch, featloc, indices] in progress(
-                    torch.utils.data.DataLoader(TensorDataset(
+            for [zbatch, featloc, indices] in progress(torch.utils.data.DataLoader(TensorDataset(
                         group_sample, group_location, group_indices),
                         batch_size=args.inference_batch_size, num_workers=10,
-                        pin_memory=True),
-                    desc="Visualize %s" % group):
+                        pin_memory=True), desc=f"Visualize {group}"):
                 zbatch = zbatch.cuda()
                 tensor_image = model(zbatch)
                 feature_mask = torch.zeros((len(zbatch), 1) + feature_shape)
@@ -447,7 +445,7 @@ def scale_summary(scale, lownums, highnums):
             for v, o in zip(value[:lownums], order[:lownums]))
     highsum = ' '.join('%d: %.3g' % (o.item(), -v.item())
             for v, o in zip(value[-highnums:], order[-highnums:]))
-    return lowsum + ' ... ' + highsum
+    return f'{lowsum} ... {highsum}'
 
 # Phase 3.  Given those two sets, now optimize a such that:
 #   Door pred lost if we take 0 * a at a candidate (1)
@@ -466,8 +464,7 @@ def initial_ablation(args, dissectdir):
     with open(os.path.join(dissectdir, 'dissect.json')) as f:
         dissection = EasyDict(json.load(f))
     lrec = [l for l in dissection.layers if l.layer == args.layer][0]
-    rrec = [r for r in lrec.rankings if r.name == '%s-iou' % args.classname
-            ][0]
+    rrec = [r for r in lrec.rankings if r.name == f'{args.classname}-iou'][0]
     init_scores = -torch.tensor(rrec.score)
     return init_scores / init_scores.max()
 
@@ -485,10 +482,7 @@ def ace_loss(segmenter, classnum, model, layer, high_replacement, ablation,
         assert discrete_units > 0
         d = torch.zeros_like(ablation)
         top_units = torch.topk(ablation.view(-1), discrete_units)[1]
-        if mixed_units:
-            d.view(-1)[top_units] = ablation.view(-1)[top_units]
-        else:
-            d.view(-1)[top_units] = 1
+        d.view(-1)[top_units] = ablation.view(-1)[top_units] if mixed_units else 1
         ablation = d
     # First, ablate a sample of locations with positive presence
     # and see how much the presence is reduced.
@@ -761,8 +755,7 @@ def train_ablation(args, corpus, cachefile, model, segmenter, classnum,
 
 def tensor_to_numpy_image_batch(tensor_image):
     byte_image = (((tensor_image+1)/2)*255).clamp(0, 255).byte()
-    numpy_image = byte_image.permute(0, 2, 3, 1).cpu().numpy()
-    return numpy_image
+    return byte_image.permute(0, 2, 3, 1).cpu().numpy()
 
 # Phase 4: evaluation of intervention
 
@@ -896,7 +889,7 @@ def add_ace_ranking_to_dissection(outdir, layer, classname, total_scores):
     with open(source_filename) as f:
         dissection = EasyDict(json.load(f))
 
-    ranking_name = '%s-ace' % classname
+    ranking_name = f'{classname}-ace'
 
     # Remove any old ace ranking with the same name
     lrec = [l for l in dissection.layers if l.layer == layer][0]
@@ -918,7 +911,7 @@ def add_ace_ranking_to_dissection(outdir, layer, classname, total_scores):
 def summarize_scores(args, corpus, cachedir, layer, classname, variant, scores):
     target_filename = os.path.join(cachedir, 'summary.json')
 
-    ranking_name = '%s-%s' % (classname, variant)
+    ranking_name = f'{classname}-{variant}'
     # Now convert ace scores to rankings
     new_rankings = [dict(
         name=ranking_name,

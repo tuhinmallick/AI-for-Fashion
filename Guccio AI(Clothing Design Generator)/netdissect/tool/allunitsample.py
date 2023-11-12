@@ -42,10 +42,11 @@ def main():
     if args.pthfile is not None:
         data = torch.load(args.pthfile)
         if 'state_dict' in data:
-            meta = {}
-            for key in data:
-                if isinstance(data[key], numbers.Number):
-                    meta[key] = data[key]
+            meta = {
+                key: data[key]
+                for key in data
+                if isinstance(data[key], numbers.Number)
+            }
             data = data['state_dict']
         model.load_state_dict(data)
     # Unwrap any DataParallel-wrapped model

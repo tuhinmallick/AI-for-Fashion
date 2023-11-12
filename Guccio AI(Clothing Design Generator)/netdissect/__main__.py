@@ -34,6 +34,7 @@ def main():
         if len(p) == 1:
             p = p + p
         return p
+
     def intpair(arg):
         p = arg.split(',')
         if len(p) == 1:
@@ -139,7 +140,7 @@ def main():
 
     # Help if broden is not present
     if not args.gen and not args.imagedir and not os.path.isdir(args.segments):
-        print_progress('Segmentation dataset not found at %s.' % args.segments)
+        print_progress(f'Segmentation dataset not found at {args.segments}.')
         print_progress('Specify dataset directory using --segments [DIR]')
         print_progress('To download Broden, run: netdissect --download')
         sys.exit(1)
@@ -151,11 +152,7 @@ def main():
 
     # Default threshold
     if args.quantile_threshold is None:
-        if args.gen:
-            args.quantile_threshold = 'iqr'
-        else:
-            args.quantile_threshold = 0.005
-
+        args.quantile_threshold = 'iqr' if args.gen else 0.005
     # Set up CUDA
     args.cuda = not args.no_cuda and torch.cuda.is_available()
     if args.cuda:
@@ -184,7 +181,7 @@ def main():
     if args.outdir is None:
         args.outdir = os.path.join('dissect', type(model).__name__)
         exit_if_job_done(args.outdir)
-        print_progress('Writing output into %s.' % args.outdir)
+        print_progress(f'Writing output into {args.outdir}.')
     os.makedirs(args.outdir, exist_ok=True)
     train_dataset = None
 
@@ -355,7 +352,7 @@ def add_scale_offset_info(model, layer_names):
             aka = aka_map[name]
             model.scale_offset[aka] = sequence_scale_offset(sequence)
     for name in aka_map:
-        assert name in seen, ('Layer %s not found' % name)
+        assert name in seen, f'Layer {name} not found'
 
 def dilation_scale_offset(dilations):
     '''Composes a list of (k, s, p) into a single total scale and offset.'''

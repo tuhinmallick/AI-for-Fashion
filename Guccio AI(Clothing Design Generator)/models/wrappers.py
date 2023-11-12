@@ -224,7 +224,7 @@ class StyleGAN2(BaseModel):
             return
 
         out = self.model.input(latent)
-        if 'input' == layer_name:
+        if layer_name == 'input':
             return
 
         out = self.model.conv1(out, latent[:, 0], noise=noise[0])
@@ -248,7 +248,7 @@ class StyleGAN2(BaseModel):
             out = conv2(out, latent[:, i + 1], noise=noise[noise_i + 1])
             if f'convs.{i}' in layer_name:
                 return
-            
+
             skip = to_rgb(out, latent[:, i + 2], skip)
             if f'to_rgbs.{i//2}' in layer_name:
                 return
@@ -265,8 +265,10 @@ class StyleGAN2(BaseModel):
         self.noise = [torch.randn(1, 1, 2 ** 2, 2 ** 2, device=self.device)]
 
         for i in range(3, self.model.log_size + 1):
-            for _ in range(2):
-                self.noise.append(torch.randn(1, 1, 2 ** i, 2 ** i, device=self.device))
+            self.noise.extend(
+                torch.randn(1, 1, 2**i, 2**i, device=self.device)
+                for _ in range(2)
+            )
 
 # PyTorch port of StyleGAN 1
 class StyleGAN(BaseModel):
@@ -313,37 +315,37 @@ class StyleGAN(BaseModel):
     def load_model(self):
         checkpoint_root = os.environ.get('GANCONTROL_CHECKPOINT_DIR', Path(__file__).parent / 'checkpoints')
         checkpoint = Path(checkpoint_root) / f'stylegan/stylegan_{self.outclass}_{self.resolution}.pt'
-        
+
         self.model = stylegan.StyleGAN_G(self.resolution).to(self.device)
-
-        urls_tf = {
-            'vases': 'https://thisvesseldoesnotexist.s3-us-west-2.amazonaws.com/public/network-snapshot-008980.pkl',
-            'fireworks': 'https://mega.nz/#!7uBHnACY!quIW-pjdDa7NqnZOYh1z5UemWwPOW6HkYSoJ4usCg9U',
-            'abstract': 'https://mega.nz/#!vCQyHQZT!zdeOg3VvT4922Z2UfxO51xgAfJD-NAK2nW7H_jMlilU',
-            'anime': 'https://mega.nz/#!vawjXISI!F7s13yRicxDA3QYqYDL2kjnc2K7Zk3DwCIYETREmBP4',
-            'ukiyo-e': 'https://drive.google.com/uc?id=1CHbJlci9NhVFifNQb3vCGu6zw4eqzvTd',
-        }
-
-        urls_torch = {
-            'celebahq': 'https://drive.google.com/uc?export=download&id=1lGcRwNoXy_uwXkD6sy43aAa-rMHRR7Ad',
-            'bedrooms': 'https://drive.google.com/uc?export=download&id=1r0_s83-XK2dKlyY3WjNYsfZ5-fnH8QgI',
-            'ffhq': 'https://drive.google.com/uc?export=download&id=1GcxTcLDPYxQqcQjeHpLUutGzwOlXXcks',
-            'cars': 'https://drive.google.com/uc?export=download&id=1aaUXHRHjQ9ww91x4mtPZD0w50fsIkXWt',
-            'cats': 'https://drive.google.com/uc?export=download&id=1JzA5iiS3qPrztVofQAjbb0N4xKdjOOyV',
-            'wikiart': 'https://drive.google.com/uc?export=download&id=1fN3noa7Rsl9slrDXsgZVDsYFxV0O08Vx',
-        }
 
         if not checkpoint.is_file():
             os.makedirs(checkpoint.parent, exist_ok=True)
+            urls_torch = {
+                'celebahq': 'https://drive.google.com/uc?export=download&id=1lGcRwNoXy_uwXkD6sy43aAa-rMHRR7Ad',
+                'bedrooms': 'https://drive.google.com/uc?export=download&id=1r0_s83-XK2dKlyY3WjNYsfZ5-fnH8QgI',
+                'ffhq': 'https://drive.google.com/uc?export=download&id=1GcxTcLDPYxQqcQjeHpLUutGzwOlXXcks',
+                'cars': 'https://drive.google.com/uc?export=download&id=1aaUXHRHjQ9ww91x4mtPZD0w50fsIkXWt',
+                'cats': 'https://drive.google.com/uc?export=download&id=1JzA5iiS3qPrztVofQAjbb0N4xKdjOOyV',
+                'wikiart': 'https://drive.google.com/uc?export=download&id=1fN3noa7Rsl9slrDXsgZVDsYFxV0O08Vx',
+            }
+
             if self.outclass in urls_torch:
                 download_ckpt(urls_torch[self.outclass], checkpoint)
             else:
                 checkpoint_tf = checkpoint.with_suffix('.pkl')
                 if not checkpoint_tf.is_file():
+                    urls_tf = {
+                        'vases': 'https://thisvesseldoesnotexist.s3-us-west-2.amazonaws.com/public/network-snapshot-008980.pkl',
+                        'fireworks': 'https://mega.nz/#!7uBHnACY!quIW-pjdDa7NqnZOYh1z5UemWwPOW6HkYSoJ4usCg9U',
+                        'abstract': 'https://mega.nz/#!vCQyHQZT!zdeOg3VvT4922Z2UfxO51xgAfJD-NAK2nW7H_jMlilU',
+                        'anime': 'https://mega.nz/#!vawjXISI!F7s13yRicxDA3QYqYDL2kjnc2K7Zk3DwCIYETREmBP4',
+                        'ukiyo-e': 'https://drive.google.com/uc?id=1CHbJlci9NhVFifNQb3vCGu6zw4eqzvTd',
+                    }
+
                     download_ckpt(urls_tf[self.outclass], checkpoint_tf)
                 print('Converting TensorFlow checkpoint to PyTorch')
                 self.model.export_from_tf(checkpoint_tf)
-        
+
         self.model.load_weights(checkpoint)
 
     def sample_latent(self, n_samples=1, seed=None, truncation=None):
@@ -406,11 +408,7 @@ class StyleGAN(BaseModel):
         # Generator
         batch_size = x.size(0)
         for i, (n, m) in enumerate(G.blocks.items()): # InputBlock or GSynthesisBlock
-            if i == 0:
-                r = m(x[:, 2*i:2*i+2])
-            else:
-                r = m(r, x[:, 2*i:2*i+2])
-
+            r = m(x[:, 2*i:2*i+2]) if i == 0 else m(r, x[:, 2*i:2*i+2])
             children = iterate(m, f'g_synthesis.blocks.{n}', [])
             for c in children:
                 if layer_name in c: # substring
@@ -628,7 +626,7 @@ class BigGAN(BaseModel):
         else:
             class_label = self.v_class.repeat(x[0].shape[0], 1)
             embed = len(x)*[self.model.embeddings(class_label)]
-        
+
         assert len(x) == self.model.n_latents, f'Expected {self.model.n_latents} latents, got {len(x)}'
         assert len(embed) == self.model.n_latents, f'Expected {self.model.n_latents} class vectors, got {len(class_label)}'
 
@@ -640,7 +638,7 @@ class BigGAN(BaseModel):
         z = z.permute(0, 3, 1, 2).contiguous()
 
         cond_idx = 1
-        for i, layer in enumerate(self.model.generator.layers[:n_layers]):
+        for layer in self.model.generator.layers[:n_layers]:
             if isinstance(layer, biggan.GenBlock):
                 z = layer(z, cond_vectors[cond_idx], self.truncation)
                 cond_idx += 1
@@ -707,11 +705,11 @@ def get_instrumented_model(name, output_class, layers, device, **kwargs):
     # Verify given layer names
     module_names = [name for (name, _) in model.named_modules()]
     for layer_name in layers:
-        if not layer_name in module_names:
+        if layer_name not in module_names:
             print(f"Layer '{layer_name}' not found in model!")
             print("Available layers:", '\n'.join(module_names))
             raise RuntimeError(f"Unknown layer '{layer_name}''")
-    
+
     # Reset StyleGANs to z mode for shape annotation
     if hasattr(model, 'use_z'):
         model.use_z()

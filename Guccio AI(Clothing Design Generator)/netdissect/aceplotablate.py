@@ -27,8 +27,12 @@ def run_command(args):
     FigureCanvas(fig)
     ax = fig.add_subplot(111)
     for metric in [args.metric, 'iou']:
-        jsonname = os.path.join(args.outdir, args.layer, 'fullablation',
-            '%s-%s.json' % (args.classname, metric))
+        jsonname = os.path.join(
+            args.outdir,
+            args.layer,
+            'fullablation',
+            f'{args.classname}-{metric}.json',
+        )
         with open(jsonname) as f:
             summary = json.load(f)
         baseline = summary['baseline']
@@ -36,19 +40,21 @@ def run_command(args):
         norm_effects = [0] + [1.0 - e / baseline for e in effects]
         ax.plot(norm_effects, label=
                 'Units by ACE' if 'ace' in metric else 'Top units by IoU')
-    ax.set_title('Effect of ablating units for %s' % (args.classname))
+    ax.set_title(f'Effect of ablating units for {args.classname}')
     ax.grid(True)
     ax.legend()
-    ax.set_ylabel('Portion of %s pixels removed' % args.classname)
+    ax.set_ylabel(f'Portion of {args.classname} pixels removed')
     ax.set_xlabel('Number of units ablated')
     ax.set_ylim(0, 1.0)
     ax.set_xlim(0, 25)
     fig.tight_layout()
     dirname = os.path.join(args.outdir, args.layer, 'fullablation')
-    fig.savefig(os.path.join(dirname, 'effect-%s-%s.png' %
-        (args.classname, args.metric)))
-    fig.savefig(os.path.join(dirname, 'effect-%s-%s.pdf' %
-        (args.classname, args.metric)))
+    fig.savefig(
+        os.path.join(dirname, f'effect-{args.classname}-{args.metric}.png')
+    )
+    fig.savefig(
+        os.path.join(dirname, f'effect-{args.classname}-{args.metric}.pdf')
+    )
 
 if __name__ == '__main__':
     main()

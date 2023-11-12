@@ -26,7 +26,7 @@ class ICAEstimator():
         self.total_var = 0.0
 
     def get_param_str(self):
-        return "ica_c{}{}".format(self.n_components, '_w' if self.whiten else '')
+        return f"ica_c{self.n_components}{'_w' if self.whiten else ''}"
     
     def fit(self, X):
         self.transformer.fit(X)
@@ -60,7 +60,7 @@ class IPCAEstimator():
         self.batch_support = True
 
     def get_param_str(self):
-        return "ipca_c{}{}".format(self.n_components, '_w' if self.whiten else '')
+        return f"ipca_c{self.n_components}{'_w' if self.whiten else ''}"
 
     def fit(self, X):
         self.transformer.fit(X)
@@ -130,7 +130,7 @@ class FacebookPCAEstimator():
         self.l = 2*self.n_components
 
     def get_param_str(self):
-        return "fbpca_c{}_it{}_l{}".format(self.n_components, self.n_iter, self.l)
+        return f"fbpca_c{self.n_components}_it{self.n_iter}_l{self.l}"
 
     def fit(self, X):
         U, s, Va = fbpca.pca(X, k=self.n_components, n_iter=self.n_iter, raw=True, l=self.l)
@@ -176,7 +176,7 @@ class SPCAEstimator():
         self.total_var = 0.0
 
     def get_param_str(self):
-        return "spca_c{}_a{}{}".format(self.n_components, self.alpha, '_w' if self.whiten else '')
+        return f"spca_c{self.n_components}_a{self.alpha}{'_w' if self.whiten else ''}"
         
     def fit(self, X):
         self.transformer.fit(X)

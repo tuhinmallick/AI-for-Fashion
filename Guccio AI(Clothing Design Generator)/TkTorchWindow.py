@@ -89,17 +89,17 @@ class TorchImageView(OpenGLFrame):
         import pycuda.gl
 
         assert torch.cuda.is_available(), "PyTorch: CUDA is not available"
-        print('Using GPU {}'.format(torch.cuda.current_device()))
-        
+        print(f'Using GPU {torch.cuda.current_device()}')
+
         # Create tensor to be shared between GL and CUDA
         # Always overwritten so no sharing is necessary
         dummy = torch.cuda.FloatTensor((1))
         dummy.uniform_()
         dummy = Variable(dummy)
-        
+
         # Create a buffer with pycuda and gloo views, using tensor created above
         self.tex, self.cuda_buffer = create_gl_texture((1, 3, width, height))
-        
+
         # create a shader to program to draw to the screen
         vertex = """
         uniform float scale;
@@ -120,7 +120,7 @@ class TorchImageView(OpenGLFrame):
         } """
         # Build the program and corresponding buffers (with 4 vertices)
         self.screen = gloo.Program(vertex, fragment, count=4)
-        
+
         # NDC coordinates:         Texcoords:          Vertex order,
         # (-1, +1)       (+1, +1)   (0,0)     (1,0)    triangle strip:
         #        +-------+               +----+          1----3
@@ -128,7 +128,7 @@ class TorchImageView(OpenGLFrame):
         #        | SPACE |               |    |          | /  |
         #        +-------+               +----+          2----4
         # (-1, -1)       (+1, -1)   (0,1)     (1,1)
-        
+
         # Upload data to GPU
         self.screen['position'] = [(-1,+1), (-1,-1), (+1,+1), (+1,-1)]
         self.screen['texcoord'] = [(0,0), (0,1), (1,0), (1,1)]

@@ -47,7 +47,7 @@ def main():
     # Write out text labels
     labels, cats = segmenter.get_label_and_category_names()
     with open(os.path.join(args.outdir, 'labels.txt'), 'w') as f:
-        for i, (label, cat) in enumerate(labels):
+        for label, cat in labels:
             f.write('%s %s\n' % (label, cat))
 
     # Move models to cuda

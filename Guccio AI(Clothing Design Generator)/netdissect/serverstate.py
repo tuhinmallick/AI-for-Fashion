@@ -39,9 +39,7 @@ class DissectionProject:
         return self.stdz.tolist()
 
     def get_z(self, id):
-        if id < len(self.stdz):
-            return self.stdz[id]
-        return self.get_zs((id + 1) * 2)[id]
+        return self.stdz[id] if id < len(self.stdz) else self.get_zs((id + 1) * 2)[id]
 
     def get_zs_for_ids(self, ids):
         max_id = max(ids)
@@ -68,12 +66,14 @@ class DissectionProject:
             return None
 
         dunits = dlayer['units']
-        result = [dict(unit=unit_num,
-                       img='/%s/%s/s-image/%d-top.jpg' %
-                        (self.path_url, layer, unit_num),
-                       label=unit['iou_label'])
-                  for unit_num, unit in enumerate(dunits)]
-        return result
+        return [
+            dict(
+                unit=unit_num,
+                img='/%s/%s/s-image/%d-top.jpg' % (self.path_url, layer, unit_num),
+                label=unit['iou_label'],
+            )
+            for unit_num, unit in enumerate(dunits)
+        ]
 
     def get_rankings(self, layer):
         try:
@@ -81,11 +81,14 @@ class DissectionProject:
                     if dl['layer'] == layer][0]
         except:
             return None
-        result = [dict(name=ranking['name'],
-                       metric=ranking.get('metric', None),
-                       scores=ranking['score'])
-                  for ranking in dlayer['rankings']]
-        return result
+        return [
+            dict(
+                name=ranking['name'],
+                metric=ranking.get('metric', None),
+                scores=ranking['score'],
+            )
+            for ranking in dlayer['rankings']
+        ]
 
     def get_levels(self, layer, quantiles):
         levels = self.tester.levels(
@@ -135,12 +138,10 @@ class DissectionProject:
                 Image.fromarray(img.transpose(1, 2, 0)).save(
                          os.path.join(imgdir, filename), 'jpeg',
                          quality=99, optimize=True, progressive=True)
-                image_url_path = ('/%s/cache/img/uniq/%s/%s'
-                      % (self.path_url, randdir, filename))
+                image_url_path = f'/{self.path_url}/cache/img/uniq/{randdir}/{filename}'
                 imgurls.append(image_url_path)
                 tweet_filename = 'tweet-%d.html' % (i + startind)
-                tweet_url_path = ('/%s/cache/img/uniq/%s/%s'
-                      % (self.path_url, randdir, tweet_filename))
+                tweet_url_path = f'/{self.path_url}/cache/img/uniq/{randdir}/{tweet_filename}'
                 with open(os.path.join(imgdir, tweet_filename), 'w') as f:
                     f.write(twitter_card(image_url_path, tweet_url_path,
                         self.public_host))
@@ -255,13 +256,15 @@ class GanTester:
         '''
         Makes some images.
         '''
-        with torch.no_grad(), self.modellock:
+        with (torch.no_grad(), self.modellock):
             batch_size = 10
             self.apply_intervention(intervention)
-            test_loader = DataLoader(TensorDataset(z_batch[:,:,None,None]),
+            test_loader = DataLoader(
+                TensorDataset(z_batch[:, :, None, None]),
                 batch_size=batch_size,
-                pin_memory=('cuda' == self.device.type
-                            and z_batch.device.type == 'cpu'))
+                pin_memory=self.device.type == 'cuda'
+                and z_batch.device.type == 'cpu',
+            )
             result_img = torch.zeros(
                     *((len(z_batch), 3) + self.model.output_shape[2:]),
                     dtype=torch.uint8, device=self.device)
@@ -279,7 +282,7 @@ class GanTester:
     def feature_stats(self, z_batch,
             masks=None, intervention=None, layers=None):
         feature_stat = defaultdict(dict)
-        with torch.no_grad(), self.modellock:
+        with (torch.no_grad(), self.modellock):
             batch_size = 10
             self.apply_intervention(intervention)
             if masks is None:
@@ -289,12 +292,13 @@ class GanTester:
                 assert masks.shape[0] == z_batch.shape[0]
                 assert masks.shape[1] == 1
             test_loader = DataLoader(
-                TensorDataset(z_batch[:,:,None,None], masks),
+                TensorDataset(z_batch[:, :, None, None], masks),
                 batch_size=batch_size,
-                pin_memory=('cuda' == self.device.type
-                    and z_batch.device.type == 'cpu'))
+                pin_memory=self.device.type == 'cuda'
+                and z_batch.device.type == 'cpu',
+            )
             processed = 0
-            for batch_num, [batch_z, batch_m] in enumerate(test_loader):
+            for [batch_z, batch_m] in test_loader:
                 batch_z, batch_m = [
                         d.to(self.device) for d in [batch_z, batch_m]]
                 # Run model but disregard output
@@ -323,20 +327,23 @@ class GanTester:
                     mean_feature = (feature * resized_mean).view(
                             feature.shape[0], feature.shape[1], -1
                             ).sum(2).sum(0) / (resized_mean.sum() + 1e-15)
-                    if 'mean' not in feature_stat[layer]:
-                        feature_stat[layer]['mean'] = mean_feature
-                    else:
-                        feature_stat[layer]['mean'] = (
-                                processed * feature_mean[layer]['mean']
-                                + processing * mean_feature) / (
-                                        processed + processing)
+                    feature_stat[layer]['mean'] = (
+                        mean_feature
+                        if 'mean' not in feature_stat[layer]
+                        else (
+                            processed * feature_mean[layer]['mean']
+                            + processing * mean_feature
+                        )
+                        / (processed + processing)
+                    )
                 processed += processing
             # After summaries are done, also compute quantile stats
             for layer, stats in feature_stat.items():
                 if self.quantiles.get(layer, None) is not None:
                     for statname in ['max', 'mean']:
-                        stats['%s_quantile' % statname] = (
-                            self.quantiles[layer].normalize(stats[statname]))
+                        stats[f'{statname}_quantile'] = self.quantiles[
+                            layer
+                        ].normalize(stats[statname])
         return feature_stat
 
     def levels(self, layer, quantiles):
@@ -345,16 +352,17 @@ class GanTester:
     def feature_maps(self, z_batch, intervention=None, layers=None,
             quantiles=True):
         feature_map = defaultdict(list)
-        with torch.no_grad(), self.modellock:
+        with (torch.no_grad(), self.modellock):
             batch_size = 10
             self.apply_intervention(intervention)
             test_loader = DataLoader(
-                TensorDataset(z_batch[:,:,None,None]),
+                TensorDataset(z_batch[:, :, None, None]),
                 batch_size=batch_size,
-                pin_memory=('cuda' == self.device.type
-                    and z_batch.device.type == 'cpu'))
+                pin_memory=self.device.type == 'cuda'
+                and z_batch.device.type == 'cpu',
+            )
             processed = 0
-            for batch_num, [batch_z] in enumerate(test_loader):
+            for [batch_z] in test_loader:
                 batch_z = batch_z.to(self.device)
                 # Run model but disregard output
                 self.model(batch_z)
@@ -466,15 +474,18 @@ def decode_intervention(intervention, layer_shapes):
             channels[layer][0, unit] = alpha
             channels[layer][1, unit] = value
     if mask is not None:
-        for layer in channels:
+        for layer, value_ in channels.items():
             layer_shape = layer_shapes[layer][2:]
-            if maskpooling == 'mean':
-                layer_mask = torch.nn.functional.adaptive_avg_pool2d(
-                    mask[None,None,...], layer_shape)[0]
-            else:
-                layer_mask = torch.nn.functional.adaptive_max_pool2d(
-                    mask[None,None,...], layer_shape)[0]
-            channels[layer][0] *= layer_mask
+            layer_mask = (
+                torch.nn.functional.adaptive_avg_pool2d(
+                    mask[None, None, ...], layer_shape
+                )[0]
+                if maskpooling == 'mean'
+                else torch.nn.functional.adaptive_max_pool2d(
+                    mask[None, None, ...], layer_shape
+                )[0]
+            )
+            value_[0] *= layer_mask
     return channels
 
 def img2base64(imgarray, for_html=True, image_format='jpeg'):
@@ -485,10 +496,7 @@ def img2base64(imgarray, for_html=True, image_format='jpeg'):
     Image.fromarray(imgarray).save(input_image_buff, image_format,
             quality=99, optimize=True, progressive=True)
     res = base64.b64encode(input_image_buff.getvalue()).decode('ascii')
-    if for_html:
-        return 'data:image/' + image_format + ';base64,' + res
-    else:
-        return res
+    return f'data:image/{image_format};base64,{res}' if for_html else res
 
 def base642img(stringdata):
     stringdata = re.sub('^(?:data:)?image/\w+;base64,', '', stringdata)

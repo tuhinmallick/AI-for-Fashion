@@ -34,7 +34,7 @@ def compare(model, layer, z1, z2):
     inst._retained[layer] = None
     with torch.no_grad():
         model.partial_forward(z1, layer)
-    
+
     assert inst._retained[layer] is not None, 'Layer not retained (partial)'
     feat_partial = inst._retained[layer].cpu().numpy().copy().reshape(-1)
 
@@ -44,22 +44,18 @@ def compare(model, layer, z1, z2):
     inst._retained[layer] = None
     with torch.no_grad():
         model.forward(z2)
-    
+
     assert inst._retained[layer] is not None, 'Layer not retained (full)'
     feat_full = inst.retained_features()[layer].cpu().numpy().copy().reshape(-1)
 
-    diff = np.sum(np.abs(feat_partial - feat_full))
-    return diff
+    return np.sum(np.abs(feat_partial - feat_full))
 
-
-configs = []
 
 # StyleGAN2
 models = ['StyleGAN2']
 layers = ['convs.0',]
 classes = ['cat', 'ffhq']
-configs.append(itertools.product(models, layers, classes))
-
+configs = [itertools.product(models, layers, classes)]
 # StyleGAN
 models = ['StyleGAN']
 layers = [
@@ -107,7 +103,7 @@ for config in configs:
             feat2 = inst._retained[layer].reshape(-1)
             diff = torch.sum(torch.abs(feat1 - feat2))
             assert diff < 1e-8, f'Layer {layer} output contains randomness, diff={diff}'
-    
+
 
         # Test positive
         torch.manual_seed(SEED)
