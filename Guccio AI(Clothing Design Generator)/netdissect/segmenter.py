@@ -59,7 +59,7 @@ class UnifiedParsingSegmenter(BaseSegmenter):
         # Create a segmentation model
         if segsizes is None:
             segsizes = [256]
-        if segdiv == None:
+        if segdiv is None:
             segdiv = 'undivided'
         segvocab = 'upp'
         segarch = ('resnet50', 'upernet')
@@ -70,9 +70,7 @@ class UnifiedParsingSegmenter(BaseSegmenter):
         self.segmodel = segmodel
         self.segsizes = segsizes
         self.segdiv = segdiv
-        mult = 1
-        if self.segdiv == 'quad':
-            mult = 5
+        mult = 5 if self.segdiv == 'quad' else 1
         self.divmult = mult
         # Assign class numbers for parts.
         first_partnumber = (
@@ -117,14 +115,15 @@ class UnifiedParsingSegmenter(BaseSegmenter):
         # Labels are ordered as follows:
         # 0, [object labels] [divided object labels] [materials] [parts]
         # The zero label is reserved to mean 'no prediction'.
-        if self.segdiv == 'quad':
-            suffixes = ['t', 'l', 'b', 'r']
-        else:
-            suffixes = []
+        suffixes = ['t', 'l', 'b', 'r'] if self.segdiv == 'quad' else []
         divided_labels = []
         for suffix in suffixes:
-            divided_labels.extend([('%s-%s' % (label, suffix), 'part')
-                for label in self.segmodel.labeldata['object'][1:]])
+            divided_labels.extend(
+                [
+                    (f'{label}-{suffix}', 'part')
+                    for label in self.segmodel.labeldata['object'][1:]
+                ]
+            )
         # Create the whole list of labels
         labelcats = (
                 [(label, 'object')
@@ -246,10 +245,7 @@ class UnifiedParsingSegmenter(BaseSegmenter):
             # atttention to and penalize such predictions.)
             mask2 = (pred['object'].max(dim=1)[1] == object_index) * (
                     part_pred[i].max(dim=1)[1] == local_index)
-            if mask is None:
-                mask = mask2
-            else:
-                mask = torch.max(mask, mask2)
+            mask = mask2 if mask is None else torch.max(mask, mask2)
             result = result + (part_pred[i][:, local_index])
         assert result is not 0, 'unrecognized class %d' % classnum
         return result, mask
@@ -287,13 +283,13 @@ class SemanticSegmenter(BaseSegmenter):
     def __init__(self, modeldir=None, segarch=None, segvocab=None,
             segsizes=None, segdiv=None, epoch=None):
         # Create a segmentation model
-        if modeldir == None:
+        if modeldir is None:
             modeldir = 'dataset/segmodel'
-        if segvocab == None:
+        if segvocab is None:
             segvocab = 'baseline'
-        if segarch == None:
+        if segarch is None:
             segarch = ('resnet50_dilated8', 'ppm_bilinear_deepsup')
-        if segdiv == None:
+        if segdiv is None:
             segdiv = 'undivided'
         elif isinstance(segarch, str):
             segarch = segarch.split(',')
@@ -302,8 +298,12 @@ class SemanticSegmenter(BaseSegmenter):
             segsizes = getattr(segmodel.meta, 'segsizes', [256])
         self.segsizes = segsizes
         # Verify segmentation model to has every out_channel labeled.
-        assert len(segmodel.meta.labels) == list(c for c in segmodel.modules()
-            if isinstance(c, torch.nn.Conv2d))[-1].out_channels
+        assert (
+            len(segmodel.meta.labels)
+            == [c for c in segmodel.modules() if isinstance(c, torch.nn.Conv2d)][
+                -1
+            ].out_channels
+        )
         segmodel.cuda()
         self.segmodel = segmodel
         self.segdiv = segdiv
@@ -352,11 +352,15 @@ class SemanticSegmenter(BaseSegmenter):
             suffixes = ['t', 'l', 'b', 'r']
             divided_labels = []
             for suffix in suffixes:
-                divided_labels.extend([('%s-%s' % (label, suffix), cat)
-                    for label, cat in self.labels[1:]])
-                self.channelmap.update({
-                    '%s-%s' % (label, suffix): self.channelmap[label]
-                    for label, cat in self.labels[1:] })
+                divided_labels.extend(
+                    [(f'{label}-{suffix}', cat) for label, cat in self.labels[1:]]
+                )
+                self.channelmap.update(
+                    {
+                        f'{label}-{suffix}': self.channelmap[label]
+                        for label, cat in self.labels[1:]
+                    }
+                )
             self.labels.extend(divided_labels)
         # For examining a single class
         self.channellist = [self.channelmap[name] for name, _ in self.labels]
@@ -515,7 +519,7 @@ def load_segmentation_model(modeldir, segmodel_arch, segvocab, epoch=None):
     if epoch is None:
         choices = [os.path.basename(n)[14:-4] for n in
                 glob.glob(os.path.join(segmodel_dir, 'encoder_epoch_*.pth'))]
-        epoch = max([int(c) for c in choices if c.isdigit()])
+        epoch = max(int(c) for c in choices if c.isdigit())
     # Create a segmentation model
     segbuilder = segmodel_module.ModelBuilder()
     # example segmodel_arch = ('resnet101', 'upernet')
@@ -548,8 +552,8 @@ def ensure_upp_segmenter_downloaded(directory):
     for fn in files:
         if os.path.isfile(os.path.join(download_dir, fn)):
             continue # Skip files already downloaded
-        url = '%s/%s/%s' % (baseurl, dirname, fn)
-        print('Downloading %s' % url)
+        url = f'{baseurl}/{dirname}/{fn}'
+        print(f'Downloading {url}')
         urlretrieve(url, os.path.join(download_dir, fn))
     assert os.path.isfile(os.path.join(directory, dirname, 'labels.json'))
 

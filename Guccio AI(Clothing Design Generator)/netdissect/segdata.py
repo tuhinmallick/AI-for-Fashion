@@ -28,10 +28,16 @@ class MultiSegmentDataset(object):
                 transform=transform)
         self.fields = []
         with open(os.path.join(directory, 'labelnames.json'), 'r') as f:
-            for defn in json.load(f):
-                self.fields.append(FieldDef(
-                    defn['field'], defn['index'], defn['bitshift'],
-                    defn['bitmask'], defn['label']))
+            self.fields.extend(
+                FieldDef(
+                    defn['field'],
+                    defn['index'],
+                    defn['bitshift'],
+                    defn['bitmask'],
+                    defn['label'],
+                )
+                for defn in json.load(f)
+            )
         self.labels = ['-'] # Reserve label 0 to mean "no label"
         self.categories = []
         self.label_category = [0]

@@ -17,8 +17,7 @@ class SegmentationModuleBase(nn.Module):
         valid = (label >= 0).long()
         acc_sum = torch.sum(valid * (preds == label).long())
         pixel_sum = torch.sum(valid)
-        acc = acc_sum.float() / (pixel_sum.float() + 1e-10)
-        return acc
+        return acc_sum.float() / (pixel_sum.float() + 1e-10)
 
 
 class SegmentationModule(SegmentationModuleBase):
@@ -30,22 +29,23 @@ class SegmentationModule(SegmentationModuleBase):
         self.deep_sup_scale = deep_sup_scale
 
     def forward(self, feed_dict, *, segSize=None):
-        if segSize is None: # training
-            if self.deep_sup_scale is not None: # use deep supervision technique
-                (pred, pred_deepsup) = self.decoder(self.encoder(feed_dict['img_data'], return_feature_maps=True))
-            else:
-                pred = self.decoder(self.encoder(feed_dict['img_data'], return_feature_maps=True))
+        if segSize is not None:
+            return self.decoder(
+                self.encoder(feed_dict['img_data'], return_feature_maps=True),
+                segSize=segSize,
+            )
+        if self.deep_sup_scale is not None: # use deep supervision technique
+            (pred, pred_deepsup) = self.decoder(self.encoder(feed_dict['img_data'], return_feature_maps=True))
+        else:
+            pred = self.decoder(self.encoder(feed_dict['img_data'], return_feature_maps=True))
 
-            loss = self.crit(pred, feed_dict['seg_label'])
-            if self.deep_sup_scale is not None:
-                loss_deepsup = self.crit(pred_deepsup, feed_dict['seg_label'])
-                loss = loss + loss_deepsup * self.deep_sup_scale
+        loss = self.crit(pred, feed_dict['seg_label'])
+        if self.deep_sup_scale is not None:
+            loss_deepsup = self.crit(pred_deepsup, feed_dict['seg_label'])
+            loss = loss + loss_deepsup * self.deep_sup_scale
 
-            acc = self.pixel_acc(pred, feed_dict['seg_label'])
-            return loss, acc
-        else: # inference
-            pred = self.decoder(self.encoder(feed_dict['img_data'], return_feature_maps=True), segSize=segSize)
-            return pred
+        acc = self.pixel_acc(pred, feed_dict['seg_label'])
+        return loss, acc
 
 
 def conv3x3(in_planes, out_planes, stride=1, has_bias=False):
@@ -75,21 +75,13 @@ class ModelBuilder():
         #    m.weight.data.normal_(0.0, 0.0001)
 
     def build_encoder(self, arch='resnet50_dilated8', fc_dim=512, weights=''):
-        pretrained = True if len(weights) == 0 else False
+        pretrained = len(weights) == 0
         if arch == 'resnet34':
             raise NotImplementedError
-            orig_resnet = resnet.__dict__['resnet34'](pretrained=pretrained)
-            net_encoder = Resnet(orig_resnet)
         elif arch == 'resnet34_dilated8':
             raise NotImplementedError
-            orig_resnet = resnet.__dict__['resnet34'](pretrained=pretrained)
-            net_encoder = ResnetDilated(orig_resnet,
-                                        dilate_scale=8)
         elif arch == 'resnet34_dilated16':
             raise NotImplementedError
-            orig_resnet = resnet.__dict__['resnet34'](pretrained=pretrained)
-            net_encoder = ResnetDilated(orig_resnet,
-                                        dilate_scale=16)
         elif arch == 'resnet50':
             orig_resnet = resnet.__dict__['resnet50'](pretrained=pretrained)
             net_encoder = Resnet(orig_resnet)
@@ -205,21 +197,21 @@ class Resnet(nn.Module):
         self.layer4 = orig_resnet.layer4
 
     def forward(self, x, return_feature_maps=False):
-        conv_out = []
-
         x = self.relu1(self.bn1(self.conv1(x)))
         x = self.relu2(self.bn2(self.conv2(x)))
         x = self.relu3(self.bn3(self.conv3(x)))
         x = self.maxpool(x)
 
-        x = self.layer1(x); conv_out.append(x);
-        x = self.layer2(x); conv_out.append(x);
-        x = self.layer3(x); conv_out.append(x);
-        x = self.layer4(x); conv_out.append(x);
+        x = self.layer1(x)
+        conv_out = [x]
+        x = self.layer2(x)
+        conv_out.append(x);
+        x = self.layer3(x)
+        conv_out.append(x);
+        x = self.layer4(x)
+        conv_out.append(x);
 
-        if return_feature_maps:
-            return conv_out
-        return [x]
+        return conv_out if return_feature_maps else [x]
 
 
 class ResnetDilated(nn.Module):
@@ -261,28 +253,26 @@ class ResnetDilated(nn.Module):
                 if m.kernel_size == (3, 3):
                     m.dilation = (dilate//2, dilate//2)
                     m.padding = (dilate//2, dilate//2)
-            # other convoluions
-            else:
-                if m.kernel_size == (3, 3):
-                    m.dilation = (dilate, dilate)
-                    m.padding = (dilate, dilate)
+            elif m.kernel_size == (3, 3):
+                m.dilation = (dilate, dilate)
+                m.padding = (dilate, dilate)
 
     def forward(self, x, return_feature_maps=False):
-        conv_out = []
-
         x = self.relu1(self.bn1(self.conv1(x)))
         x = self.relu2(self.bn2(self.conv2(x)))
         x = self.relu3(self.bn3(self.conv3(x)))
         x = self.maxpool(x)
 
-        x = self.layer1(x); conv_out.append(x);
-        x = self.layer2(x); conv_out.append(x);
-        x = self.layer3(x); conv_out.append(x);
-        x = self.layer4(x); conv_out.append(x);
+        x = self.layer1(x)
+        conv_out = [x]
+        x = self.layer2(x)
+        conv_out.append(x);
+        x = self.layer3(x)
+        conv_out.append(x);
+        x = self.layer4(x)
+        conv_out.append(x);
 
-        if return_feature_maps:
-            return conv_out
-        return [x]
+        return conv_out if return_feature_maps else [x]
 
 
 # last conv, bilinear upsample
@@ -360,13 +350,15 @@ class PPMBilinear(nn.Module):
         self.inference = inference
 
         self.ppm = []
-        for scale in pool_scales:
-            self.ppm.append(nn.Sequential(
+        self.ppm.extend(
+            nn.Sequential(
                 nn.AdaptiveAvgPool2d(scale),
                 nn.Conv2d(fc_dim, 512, kernel_size=1, bias=False),
                 SynchronizedBatchNorm2d(512),
-                nn.ReLU(inplace=True)
-            ))
+                nn.ReLU(inplace=True),
+            )
+            for scale in pool_scales
+        )
         self.ppm = nn.ModuleList(self.ppm)
 
         self.conv_last = nn.Sequential(
@@ -383,11 +375,15 @@ class PPMBilinear(nn.Module):
 
         input_size = conv5.size()
         ppm_out = [conv5]
-        for pool_scale in self.ppm:
-            ppm_out.append(nn.functional.interpolate(
+        ppm_out.extend(
+            nn.functional.interpolate(
                 pool_scale(conv5),
                 (input_size[2], input_size[3]),
-                mode='bilinear', align_corners=False))
+                mode='bilinear',
+                align_corners=False,
+            )
+            for pool_scale in self.ppm
+        )
         ppm_out = torch.cat(ppm_out, 1)
 
         x = self.conv_last(ppm_out)
@@ -411,13 +407,15 @@ class PPMBilinearDeepsup(nn.Module):
         self.inference = inference
 
         self.ppm = []
-        for scale in pool_scales:
-            self.ppm.append(nn.Sequential(
+        self.ppm.extend(
+            nn.Sequential(
                 nn.AdaptiveAvgPool2d(scale),
                 nn.Conv2d(fc_dim, 512, kernel_size=1, bias=False),
                 SynchronizedBatchNorm2d(512),
-                nn.ReLU(inplace=True)
-            ))
+                nn.ReLU(inplace=True),
+            )
+            for scale in pool_scales
+        )
         self.ppm = nn.ModuleList(self.ppm)
         self.cbr_deepsup = conv3x3_bn_relu(fc_dim // 2, fc_dim // 4, 1)
 
@@ -437,11 +435,15 @@ class PPMBilinearDeepsup(nn.Module):
 
         input_size = conv5.size()
         ppm_out = [conv5]
-        for pool_scale in self.ppm:
-            ppm_out.append(nn.functional.interpolate(
+        ppm_out.extend(
+            nn.functional.interpolate(
                 pool_scale(conv5),
                 (input_size[2], input_size[3]),
-                mode='bilinear', align_corners=False))
+                mode='bilinear',
+                align_corners=False,
+            )
+            for pool_scale in self.ppm
+        )
         ppm_out = torch.cat(ppm_out, 1)
 
         x = self.conv_last(ppm_out)
@@ -491,19 +493,23 @@ class UPerNet(nn.Module):
 
         # FPN Module
         self.fpn_in = []
-        for fpn_inplane in fpn_inplanes[:-1]: # skip the top layer
-            self.fpn_in.append(nn.Sequential(
+        self.fpn_in.extend(
+            nn.Sequential(
                 nn.Conv2d(fpn_inplane, fpn_dim, kernel_size=1, bias=False),
                 SynchronizedBatchNorm2d(fpn_dim),
-                nn.ReLU(inplace=True)
-            ))
+                nn.ReLU(inplace=True),
+            )
+            for fpn_inplane in fpn_inplanes[:-1]
+        )
         self.fpn_in = nn.ModuleList(self.fpn_in)
 
         self.fpn_out = []
-        for i in range(len(fpn_inplanes) - 1): # skip the top layer
-            self.fpn_out.append(nn.Sequential(
+        self.fpn_out.extend(
+            nn.Sequential(
                 conv3x3_bn_relu(fpn_dim, fpn_dim, 1),
-            ))
+            )
+            for _ in range(len(fpn_inplanes) - 1)
+        )
         self.fpn_out = nn.ModuleList(self.fpn_out)
 
         self.conv_last = nn.Sequential(
@@ -516,11 +522,17 @@ class UPerNet(nn.Module):
 
         input_size = conv5.size()
         ppm_out = [conv5]
-        for pool_scale, pool_conv in zip(self.ppm_pooling, self.ppm_conv):
-            ppm_out.append(pool_conv(nn.functional.interploate(
-                pool_scale(conv5),
-                (input_size[2], input_size[3]),
-                mode='bilinear', align_corners=False)))
+        ppm_out.extend(
+            pool_conv(
+                nn.functional.interploate(
+                    pool_scale(conv5),
+                    (input_size[2], input_size[3]),
+                    mode='bilinear',
+                    align_corners=False,
+                )
+            )
+            for pool_scale, pool_conv in zip(self.ppm_pooling, self.ppm_conv)
+        )
         ppm_out = torch.cat(ppm_out, 1)
         f = self.ppm_last_conv(ppm_out)
 
@@ -538,11 +550,15 @@ class UPerNet(nn.Module):
         fpn_feature_list.reverse() # [P2 - P5]
         output_size = fpn_feature_list[0].size()[2:]
         fusion_list = [fpn_feature_list[0]]
-        for i in range(1, len(fpn_feature_list)):
-            fusion_list.append(nn.functional.interpolate(
+        fusion_list.extend(
+            nn.functional.interpolate(
                 fpn_feature_list[i],
                 output_size,
-                mode='bilinear', align_corners=False))
+                mode='bilinear',
+                align_corners=False,
+            )
+            for i in range(1, len(fpn_feature_list))
+        )
         fusion_out = torch.cat(fusion_list, 1)
         x = self.conv_last(fusion_out)
 

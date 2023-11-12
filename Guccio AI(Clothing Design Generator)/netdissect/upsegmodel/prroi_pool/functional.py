@@ -30,8 +30,9 @@ __all__ = ['prroi_pool2d']
 class PrRoIPool2DFunction(ag.Function):
     @staticmethod
     def forward(ctx, features, rois, pooled_height, pooled_width, spatial_scale):
-        assert 'FloatTensor' in features.type() and 'FloatTensor' in rois.type(), \
-                'Precise RoI Pooling only takes float input, got {} for features and {} for rois.'.format(features.type(), rois.type())
+        assert (
+            'FloatTensor' in features.type() and 'FloatTensor' in rois.type()
+        ), f'Precise RoI Pooling only takes float input, got {features.type()} for features and {rois.type()} for rois.'
 
         pooled_height = int(pooled_height)
         pooled_width = int(pooled_width)

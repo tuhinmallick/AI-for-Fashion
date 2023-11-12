@@ -46,7 +46,7 @@ class BrodenDataset(torch.utils.data.Dataset):
                 self.category_info[row['name']] = row
         if categories is not None:
             # Filter out unused categories
-            categories = set([c for c in categories if c in self.category_info])
+            categories = {c for c in categories if c in self.category_info}
             for cat in list(self.category_info.keys()):
                 if cat not in categories:
                     del self.category_info[cat]
@@ -72,8 +72,7 @@ class BrodenDataset(torch.utils.data.Dataset):
         self.category_unmap = {}
         self.category_label = {}
         for cat in self.categories:
-            with open(os.path.join(self.resdir, 'c_%s.csv' % cat),
-                    encoding='utf-8') as f:
+            with open(os.path.join(self.resdir, f'c_{cat}.csv'), encoding='utf-8') as f:
                 c_data = [decode_label_dict(r) for r in csv.DictReader(f)]
             self.category_unmap[cat], self.category_map[cat] = (
                     build_numpy_category_map(c_data))
@@ -138,15 +137,15 @@ def build_dense_label_array(label_data, key='number', allow_none=False):
     Input: set of rows with 'number' fields (or another field name key).
     Output: array such that a[number] = the row with the given number.
     '''
-    result = [None] * (max([d[key] for d in label_data]) + 1)
+    result = [None] * (max(d[key] for d in label_data) + 1)
     for d in label_data:
         result[d[key]] = d
     # Fill in none
     if not allow_none:
         example = label_data[0]
         def make_empty(k):
-            return dict((c, k if c is key else type(v)())
-                    for c, v in example.items())
+            return {c: k if c is key else type(v)() for c, v in example.items()}
+
         for i, d in enumerate(result):
             if d is None:
                 result[i] = dict(make_empty(i))
@@ -157,8 +156,10 @@ def build_numpy_category_map(map_data, key1='code', key2='number'):
     Input: set of rows with 'number' fields (or another field name key).
     Output: array such that a[number] = the row with the given number.
     '''
-    results = list(numpy.zeros((max([d[key] for d in map_data]) + 1),
-            dtype=numpy.int16) for key in (key1, key2))
+    results = [
+        numpy.zeros(max(d[key] for d in map_data) + 1, dtype=numpy.int16)
+        for key in (key1, key2)
+    ]
     for d in map_data:
         results[0][d[key1]] = d[key2]
         results[1][d[key2]] = d[key1]
@@ -174,9 +175,13 @@ def decode_label_dict(row):
     result = {}
     for key, val in row.items():
         if key == 'category':
-            result[key] = dict((c, int(n))
-                for c, n in [re.match('^([^(]*)\(([^)]*)\)$', f).groups()
-                    for f in val.split(';')])
+            result[key] = {
+                c: int(n)
+                for c, n in [
+                    re.match('^([^(]*)\(([^)]*)\)$', f).groups()
+                    for f in val.split(';')
+                ]
+            }
         elif key == 'name':
             result[key] = val
         elif key == 'syns':
@@ -229,7 +234,6 @@ def scatter_batch(seg, num_labels, omit_zero=True, dtype=torch.uint8):
 
 def ensure_broden_downloaded(directory, resolution, broden_version=1):
     assert resolution in [224, 227, 384]
-    baseurl = 'http://netdissect.csail.mit.edu/data/'
     dirname = 'broden%d_%d' % (broden_version, resolution)
     if os.path.isfile(os.path.join(directory, dirname, 'index.csv')):
         return # Already downloaded
@@ -238,12 +242,13 @@ def ensure_broden_downloaded(directory, resolution, broden_version=1):
     os.makedirs(download_dir, exist_ok=True)
     full_zipfilename = os.path.join(download_dir, zipfilename)
     if not os.path.exists(full_zipfilename):
-        url = '%s/%s' % (baseurl, zipfilename)
-        print('Downloading %s' % url)
+        baseurl = 'http://netdissect.csail.mit.edu/data/'
+        url = f'{baseurl}/{zipfilename}'
+        print(f'Downloading {url}')
         data = urlopen(url)
         with open(full_zipfilename, 'wb') as f:
             f.write(data.read())
-    print('Unzipping %s' % zipfilename)
+    print(f'Unzipping {zipfilename}')
     with zipfile.ZipFile(full_zipfilename, 'r') as zip_ref:
         zip_ref.extractall(directory)
     assert os.path.isfile(os.path.join(directory, dirname, 'index.csv'))

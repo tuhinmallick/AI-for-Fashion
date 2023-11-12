@@ -38,7 +38,7 @@ class ParallelImageFolders(data.Dataset):
         self.images = make_parallel_dataset(image_roots,
                 intersection=intersection, verbose=verbose)
         if len(self.images) == 0:
-            raise RuntimeError("Found 0 images within: %s" % image_roots)
+            raise RuntimeError(f"Found 0 images within: {image_roots}")
         if size is not None:
             self.image = self.images[:size]
         if transform is not None and not hasattr(transform, '__iter__'):
@@ -58,10 +58,7 @@ class ParallelImageFolders(data.Dataset):
         if self.transforms is not None:
             sources = [transform(source)
                     for source, transform in zip(sources, self.transforms)]
-        if self.stacker is not None:
-            sources = self.stacker(sources)
-        else:
-            sources = tuple(sources)
+        sources = self.stacker(sources) if self.stacker is not None else tuple(sources)
         return sources
 
     def __len__(self):
@@ -71,24 +68,30 @@ def is_npy_file(path):
     return path.endswith('.npy') or path.endswith('.NPY')
 
 def is_image_file(path):
-    return None != re.search(r'\.(jpe?g|png)$', path, re.IGNORECASE)
+    return re.search(r'\.(jpe?g|png)$', path, re.IGNORECASE) != None
 
 def walk_image_files(rootdir, verbose=None):
     progress = default_progress(verbose)
-    indexfile = '%s.txt' % rootdir
+    indexfile = f'{rootdir}.txt'
     if os.path.isfile(indexfile):
         basedir = os.path.dirname(rootdir)
         with open(indexfile) as f:
-            result = sorted([os.path.join(basedir, line.strip())
-                for line in progress(f.readlines(),
-                    desc='Reading %s' % os.path.basename(indexfile))])
-            return result
+            return sorted(
+                [
+                    os.path.join(basedir, line.strip())
+                    for line in progress(
+                        f.readlines(),
+                        desc=f'Reading {os.path.basename(indexfile)}',
+                    )
+                ]
+            )
     result = []
-    for dirname, _, fnames in sorted(progress(os.walk(rootdir),
-            desc='Walking %s' % os.path.basename(rootdir))):
-        for fname in sorted(fnames):
-            if is_image_file(fname) or is_npy_file(fname):
-                result.append(os.path.join(dirname, fname))
+    for dirname, _, fnames in sorted(progress(os.walk(rootdir), desc=f'Walking {os.path.basename(rootdir)}')):
+        result.extend(
+            os.path.join(dirname, fname)
+            for fname in sorted(fnames)
+            if is_image_file(fname) or is_npy_file(fname)
+        )
     return result
 
 def make_parallel_dataset(image_roots, intersection=False, verbose=None):
@@ -103,8 +106,7 @@ def make_parallel_dataset(image_roots, intersection=False, verbose=None):
             if key not in image_sets:
                 image_sets[key] = []
             if not intersection and len(image_sets[key]) != j:
-                raise RuntimeError(
-                    'Images not parallel: %s missing from one dir' % (key))
+                raise RuntimeError(f'Images not parallel: {key} missing from one dir')
             image_sets[key].append(path)
     tuples = []
     for key, value in image_sets.items():
@@ -112,7 +114,6 @@ def make_parallel_dataset(image_roots, intersection=False, verbose=None):
             if intersection:
                 continue
             else:
-                raise RuntimeError(
-                    'Images not parallel: %s missing from one dir' % (key))
+                raise RuntimeError(f'Images not parallel: {key} missing from one dir')
         tuples.append(tuple(value))
     return tuples
