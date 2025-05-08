@@ -18,7 +18,7 @@ import re
 import gdown
 
 def prettify_name(name):
-    valid = "-_%s%s" % (string.ascii_letters, string.digits)
+    valid = f"-_{string.ascii_letters}{string.digits}"
     return ''.join(map(lambda c : c if c in valid else '_', name))
 
 # Add padding to sequence of images
@@ -27,11 +27,7 @@ def prettify_name(name):
 def pad_frames(strip, pad_fract_horiz=64, pad_fract_vert=0, pad_value=None):
     dtype = strip[0].dtype
     if pad_value is None:
-        if dtype in [np.float32, np.float64]:
-            pad_value = 1.0
-        else:
-            pad_value = np.iinfo(dtype).max
-    
+        pad_value = 1.0 if dtype in [np.float32, np.float64] else np.iinfo(dtype).max
     frames = [strip[0]]
     for frame in strip[1:]:
         if pad_fract_horiz > 0:

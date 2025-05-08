@@ -76,7 +76,7 @@ def activation_surface(data, target_shape=None, source_shape=None,
                 for ts, ds in zip(target_shape, data.shape))
         offset = tuple(0.5 * s - 0.5 for s in scale)
     else:
-        scale, offset = (v for v in zip(*scale_offset))
+        scale, offset = iter(zip(*scale_offset))
     # Now we adjust offsets to take into account cropping and so on
     if source_shape is not None:
         offset = tuple(o + (ts - ss) / 2.0
@@ -92,10 +92,7 @@ def activation_surface(data, target_shape=None, source_shape=None,
     ty, tx = (numpy.arange(ts) for ts in target_shape)
     sy, sx = (numpy.arange(ss) * s + o
             for ss, s, o in zip(data.shape, scale, offset))
-    levels = RectBivariateSpline(
-            sy, sx, data, kx=deg, ky=deg)(ty, tx, grid=True)
-    # Return the mask.
-    return levels
+    return RectBivariateSpline(sy, sx, data, kx=deg, ky=deg)(ty, tx, grid=True)
 
 def mask_border(mask, border=2):
     """Given a mask computes a border mask"""

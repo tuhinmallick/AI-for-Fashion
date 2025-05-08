@@ -39,7 +39,7 @@ def run_command(args):
             dat = [torch.load(os.path.join(snapshots, 'epoch-%d.pth' % i))
                  for i in range(10)]
         except:
-            print('Missing %s snapshots' % dirname)
+            print(f'Missing {dirname} snapshots')
             return
         print('reg %g' % l2_lambda)
         for i in range(10):
@@ -48,7 +48,7 @@ def run_command(args):
 
         ax.plot([dat[i]['avg_loss'] for i in range(10)],
             label='reg %g' % l2_lambda)
-    ax.set_title('%s %s' % (args.classname, args.variant))
+    ax.set_title(f'{args.classname} {args.variant}')
     ax.grid(True)
     ax.legend()
     ax.set_ylabel('Loss')

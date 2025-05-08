@@ -95,10 +95,7 @@ def coordinate_sample(shape, sample_size, seeds, grid=13, seed=1, flat=False):
         # Now take sample_size without replacement.  We do this in a way
         # such that if sample_size is decreased or increased up to 'grid',
         # the selected points become a subset, not totally different points.
-        if flat:
-            sampind[j] = numpy.ravel_multi_index(coords, dims=shape)
-        else:
-            sampind[j] = coords
+        sampind[j] = numpy.ravel_multi_index(coords, dims=shape) if flat else coords
     return sampind
 
 if __name__ == '__main__':

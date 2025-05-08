@@ -27,12 +27,12 @@ print('#######################')
 
 print('# load tensorflow model')
 modelPath = os.path.join('/trained_model')
-print('# modelPath: ' + modelPath)
+print(f'# modelPath: {modelPath}')
 model = tf.keras.models.load_model(modelPath)
 layers = model.layers
 first_layer = layers[0]
 inputImageSize = int(first_layer.input_shape[0][1] / 2)
-print('inputImageSize: ' + str(inputImageSize))
+print(f'inputImageSize: {inputImageSize}')
 
 
 app = Flask(__name__)
@@ -46,7 +46,7 @@ def error(msg):
 def get_random_string(length):
     # choose from all lowercase letter
     letters = string.ascii_lowercase
-    result_str = ''.join(random.choice(letters) for i in range(length))
+    result_str = ''.join(random.choice(letters) for _ in range(length))
     print("Random string of length", length, "is:", result_str)
     return result_str
 
@@ -89,16 +89,14 @@ def resizeImageToFitIntoInputImageSize(image):
     newWidth = isWidth
     newHeight = isHeight
 
-    if isHeight > isWidth:
+    if newHeight > newWidth:
         newHeight = inputImageSize
         newWidth = math.ceil(portion * newHeight)
     else:
         newWidth = inputImageSize
         newHeight = math.ceil(newWidth / portion)
 
-    imageThatFitsIntoBox = image.resize((newWidth, newHeight), Image.ANTIALIAS)
-    # imageThatFitsIntoBox.save(os.path.join(app.config['Upload_folder'], str(time.time()) + get_random_string(4) + '-intobox.jpg'))
-    return imageThatFitsIntoBox
+    return image.resize((newWidth, newHeight), Image.ANTIALIAS)
 
 
 def resizeImage(image):
@@ -158,19 +156,16 @@ class Prediction(Resource):
             uploadedImages.append(args['file1'])
 
         images = []
-        for i in range(len(uploadedImages)):
-            uploadedImage = uploadedImages[i]
+        for uploadedImage_ in uploadedImages:
+            uploadedImage = uploadedImage_
             pilImage = Image.open(uploadedImage)
             images.append(pilImage)
-            
-            # uncomment to debug
-            # imagePath = os.path.join(requestTmpFolder, str(i) + '.jpg')
-            # pilImage.save(imagePath, 'jpeg')
+                
+                # uncomment to debug
+                # imagePath = os.path.join(requestTmpFolder, str(i) + '.jpg')
+                # pilImage.save(imagePath, 'jpeg')
 
-        resized = []
-        for image in images:
-            resized.append(resizeImage(image))
-
+        resized = [resizeImage(image) for image in images]
         merged = mergeImages(resized)
         mergedPath = os.path.join(requestTmpFolder, 'merged.jpg')
         merged.save(mergedPath)
@@ -185,7 +180,7 @@ class Prediction(Resource):
         predictionAr = prediction.numpy()
 
         minPredictionValue = args['minPredictionValue']
-        print('minPredictionValue: ' + str(minPredictionValue))
+        print(f'minPredictionValue: {str(minPredictionValue)}')
         inputImage = Image.open(mergedPath)
         inputPixels = np.asarray(inputImage)
         allPixels = np.zeros(
@@ -210,7 +205,7 @@ class Prediction(Resource):
         if usedPixels == 0:
             raise ValueError('usedPixels is zero')
         else:
-            print('usedPixels: ' + str(usedPixels))
+            print(f'usedPixels: {str(usedPixels)}')
 
         # print(allPixels)
         predictionImage = Image.fromarray(allPixels, 'RGBA')

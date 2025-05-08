@@ -176,16 +176,16 @@ def save_frames(title, model_name, rootdir, frames, strip_width=10):
     test_name = prettify_name(title)
     outdir = f'{rootdir}/{model_name}/{test_name}'
     makedirs(outdir, exist_ok=True)
-    
+
     # Limit maximum resolution
     max_H = 512
     real_H = frames[0][0].shape[0]
     ratio = min(1.0, max_H / real_H)
-    
+
     # Combined with first 10
     strips = [np.hstack(frames) for frames in frames[:strip_width]]
     if len(strips) >= strip_width:
-        left_col = np.vstack(strips[0:strip_width//2])
+        left_col = np.vstack(strips[:strip_width//2])
         right_col = np.vstack(strips[5:10])
         grid = np.hstack([left_col, np.ones_like(left_col[:, :30]), right_col])
         im = Image.fromarray((255*grid).astype(np.uint8))
@@ -193,7 +193,7 @@ def save_frames(title, model_name, rootdir, frames, strip_width=10):
         im.save(f'{outdir}/{test_name}_all.png')
     else:
         print('Too few strips to create grid, creating just strips!')
-    
+
     for ex_num, strip in enumerate(frames[:strip_width]):
         im = Image.fromarray(np.uint8(255*np.hstack(pad_frames(strip))))
         im = im.resize((int(ratio*im.size[0]), int(ratio*im.size[1])), Image.ANTIALIAS)

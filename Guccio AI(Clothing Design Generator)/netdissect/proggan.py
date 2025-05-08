@@ -4,9 +4,7 @@ from collections import OrderedDict
 
 
 def print_network(net, verbose=False):
-    num_params = 0
-    for param in net.parameters():
-        num_params += param.numel()
+    num_params = sum(param.numel() for param in net.parameters())
     if verbose:
         print(net)
     print('Total number of parameters: {:3.3f} M'.format(num_params / 1e6))
@@ -204,7 +202,7 @@ def sizes_from_state_dict(params):
     for i in itertools.count():
         pt_layername = 'layer%d' % (i + 1)
         try:
-            weight = params['%s.conv.weight' % pt_layername]
+            weight = params[f'{pt_layername}.conv.weight']
         except KeyError:
             break
         if i == 0:
@@ -235,7 +233,7 @@ def state_dict_from_tf_parameters(parameters):
         pt_layername = 'layer%d' % (i + 1)
         # Stop looping when we run out of parameters.
         try:
-            weight = torch_from_tf(params['%s/weight' % tf_layername])
+            weight = torch_from_tf(params[f'{tf_layername}/weight'])
         except KeyError:
             break
         # Transpose convolution weights into pytorch format.
@@ -251,20 +249,22 @@ def state_dict_from_tf_parameters(parameters):
             # Ordinary Conv2d conversion.
             weight = weight.permute(3, 2, 0, 1)
             sizes.append(weight.shape[1])
-        result['%s.conv.weight' % (pt_layername)] = weight
+        result[f'{pt_layername}.conv.weight'] = weight
         # Copy bias vector.
-        bias = torch_from_tf(params['%s/bias' % tf_layername])
-        result['%s.wscale.b' % (pt_layername)] = bias
+        bias = torch_from_tf(params[f'{tf_layername}/bias'])
+        result[f'{pt_layername}.wscale.b'] = bias
     # Copy just finest-grained ToRGB output layers.  For example:
     # ToRGB_lod0/weight -> output.conv.weight
     i -= 1
     resolution = 4 * (2 ** (i // 2))
     tf_layername = 'ToRGB_lod0'
     pt_layername = 'output_%dx%d' % (resolution, resolution)
-    result['%s.conv.weight' % pt_layername] = torch_from_tf(
-            params['%s/weight' % tf_layername]).permute(3, 2, 0, 1)
-    result['%s.wscale.b' % pt_layername] = torch_from_tf(
-            params['%s/bias' % tf_layername])
+    result[f'{pt_layername}.conv.weight'] = torch_from_tf(
+        params[f'{tf_layername}/weight']
+    ).permute(3, 2, 0, 1)
+    result[f'{pt_layername}.wscale.b'] = torch_from_tf(
+        params[f'{tf_layername}/bias']
+    )
     # Return parameters
     return result
 
@@ -278,22 +278,21 @@ def state_dict_from_old_pt_dict(params):
         old_layername = 'features.%d' % i
         pt_layername = 'layer%d' % (i + 1)
         try:
-            weight = params['%s.conv.weight' % (old_layername)]
+            weight = params[f'{old_layername}.conv.weight']
         except KeyError:
             break
         if i == 0:
             sizes.append(weight.shape[0])
         if i % 2 == 0:
             sizes.append(weight.shape[1])
-        result['%s.conv.weight' % (pt_layername)] = weight
-        result['%s.wscale.b' % (pt_layername)] = params[
-                '%s.wscale.b' % (old_layername)]
+        result[f'{pt_layername}.conv.weight'] = weight
+        result[f'{pt_layername}.wscale.b'] = params[f'{old_layername}.wscale.b']
     # Copy the output layers.
     i -= 1
     resolution = 4 * (2 ** (i // 2))
     pt_layername = 'output_%dx%d' % (resolution, resolution)
-    result['%s.conv.weight' % pt_layername] = params['output.conv.weight']
-    result['%s.wscale.b' % pt_layername] = params['output.wscale.b']
+    result[f'{pt_layername}.conv.weight'] = params['output.conv.weight']
+    result[f'{pt_layername}.wscale.b'] = params['output.wscale.b']
     # Return parameters and also network architecture sizes.
     return result
 

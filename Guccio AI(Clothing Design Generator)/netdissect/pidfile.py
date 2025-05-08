@@ -41,20 +41,19 @@ def pidfile_taken(path, verbose=False):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_RDWR)
     except OSError as e:
-        if e.errno == errno.EEXIST:
-            # If we cannot because there was a race, yield the conflicter.
-            conflicter = 'race'
-            try:
-                with open(path, 'r') as lockfile:
-                    conflicter = lockfile.read().strip() or 'empty'
-            except:
-                pass
-            if verbose:
-                print('%s held by %s' % (path, conflicter))
-            return conflicter
-        else:
+        if e.errno != errno.EEXIST:
             # Other problems get an exception.
             raise
+        # If we cannot because there was a race, yield the conflicter.
+        conflicter = 'race'
+        try:
+            with open(path, 'r') as lockfile:
+                conflicter = lockfile.read().strip() or 'empty'
+        except:
+            pass
+        if verbose:
+            print(f'{path} held by {conflicter}')
+        return conflicter
     # Register to delete this file on exit.
     lockfile = os.fdopen(fd, 'r+')
     atexit.register(delete_pidfile, lockfile, path)

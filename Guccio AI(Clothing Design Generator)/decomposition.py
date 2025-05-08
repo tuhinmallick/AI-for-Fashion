@@ -370,26 +370,18 @@ def get_or_compute(config, model=None, submit_config=None, force_recompute=False
 def _compute(submit_config, config, model=None, force_recompute=False):
     basedir = Path(submit_config.run_dir)
     outdir = basedir / 'out'
-    
+
     if config.n is None:
         raise RuntimeError('Must specify number of samples with -n=XXX')
 
     if model and not isinstance(model, InstrumentedModel):
         raise RuntimeError('Passed model has to be wrapped in "InstrumentedModel"')
-    
-    if config.use_w and not 'StyleGAN' in config.model:
+
+    if config.use_w and 'StyleGAN' not in config.model:
         raise RuntimeError(f'Cannot change latent space of non-StyleGAN model {config.model}')
 
     transformer = get_estimator(config.estimator, config.components, config.sparsity)
-    dump_name = "{}-{}_{}_{}_n{}{}{}.npz".format(
-        config.model.lower(),
-        config.output_class.replace(' ', '_'),
-        config.layer.lower(),
-        transformer.get_param_str(),
-        config.n,
-        '_w' if config.use_w else '',
-        f'_seed{config.seed}' if config.seed else ''
-    )
+    dump_name = f"{config.model.lower()}-{config.output_class.replace(' ', '_')}_{config.layer.lower()}_{transformer.get_param_str()}_n{config.n}{'_w' if config.use_w else ''}{f'_seed{config.seed}' if config.seed else ''}.npz"
 
     dump_path = basedir / 'cache' / 'components' / dump_name
 
@@ -398,5 +390,5 @@ def _compute(submit_config, config, model=None, force_recompute=False):
         t_start = datetime.datetime.now()
         compute(config, dump_path, model)
         print('Total time:', datetime.datetime.now() - t_start)
-    
+
     return dump_path

@@ -39,9 +39,7 @@ def feature_extraction(img_path,model):
     expanded_img_array = np.expand_dims(img_array, axis=0)
     preprocessed_img = preprocess_input(expanded_img_array)
     result = model.predict(preprocessed_img).flatten()
-    normalized_result = result / norm(result)
-
-    return normalized_result
+    return result / norm(result)
 
 def recommend(features,feature_list):
     neighbors = NearestNeighbors(n_neighbors=6, algorithm='brute', metric='euclidean')

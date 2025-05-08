@@ -53,10 +53,7 @@ class MyConv2d(nn.Module):
     def __init__(self, input_channels, output_channels, kernel_size, gain=2**(0.5), use_wscale=False, lrmul=1, bias=True,
                 intermediate=None, upscale=False):
         super().__init__()
-        if upscale:
-            self.upscale = Upscale2d()
-        else:
-            self.upscale = None
+        self.upscale = Upscale2d() if upscale else None
         he_std = gain * (input_channels * kernel_size ** 2) ** (-0.5) # He init
         self.kernel_size = kernel_size
         if use_wscale:
@@ -77,9 +74,9 @@ class MyConv2d(nn.Module):
         bias = self.bias
         if bias is not None:
             bias = bias * self.b_mul
-        
+
         have_convolution = False
-        if self.upscale is not None and min(x.shape[2:]) * 2 >= 128:
+        if self.upscale is not None and min(x.shape[2:]) >= 64:
             # this is the fused upscale + conv from StyleGAN, sadly this seems incompatible with the non-fused way
             # this really needs to be cleaned up and go into the conv...
             w = self.weight * self.w_mul
@@ -91,12 +88,12 @@ class MyConv2d(nn.Module):
             have_convolution = True
         elif self.upscale is not None:
             x = self.upscale(x)
-    
+
         if not have_convolution and self.intermediate is None:
             return F.conv2d(x, self.weight * self.w_mul, bias, padding=self.kernel_size//2)
         elif not have_convolution:
             x = F.conv2d(x, self.weight * self.w_mul, None, padding=self.kernel_size//2)
-        
+
         if self.intermediate is not None:
             x = self.intermediate(x)
         if bias is not None:
@@ -285,10 +282,7 @@ class GSynthesisBlock(nn.Module):
     def __init__(self, in_channels, out_channels, blur_filter, dlatent_size, gain, use_wscale, use_noise, use_pixel_norm, use_instance_norm, use_styles, activation_layer):
         # 2**res x 2**res # res = 3..resolution_log2
         super().__init__()
-        if blur_filter:
-            blur = BlurLayer(blur_filter)
-        else:
-            blur = None
+        blur = BlurLayer(blur_filter) if blur_filter else None
         self.conv0_up = MyConv2d(in_channels, out_channels, kernel_size=3, gain=gain, use_wscale=use_wscale,
                                  intermediate=blur, upscale=True)
         self.epi1 = LayerEpilogue(out_channels, dlatent_size, use_wscale, use_noise, use_pixel_norm, use_instance_norm, use_styles, activation_layer)
@@ -353,14 +347,13 @@ class G_synthesis(nn.Module):
     def forward(self, dlatents_in):
         # Input: Disentangled latents (W) [minibatch, num_layers, dlatent_size].
         # lod_in = tf.cast(tf.get_variable('lod', initializer=np.float32(0), trainable=False), dtype)
-        batch_size = dlatents_in.size(0)       
+        batch_size = dlatents_in.size(0)
         for i, m in enumerate(self.blocks.values()):
             if i == 0:
                 x = m(dlatents_in[:, 2*i:2*i+2])
             else:
                 x = m(x, dlatents_in[:, 2*i:2*i+2])
-        rgb = self.torgb(x)
-        return rgb
+        return self.torgb(x)
 
 
 class StyleGAN_G(nn.Sequential):

@@ -32,7 +32,7 @@ def extract_batch_norm_stats(tf_model_path, batch_norm_stats_path=None):
                           "And see https://github.com/tensorflow/hub for installing Hub. "
                           "Probably pip install tensorflow tensorflow-hub")
     tf.reset_default_graph()
-    logger.info('Loading BigGAN module from: {}'.format(tf_model_path))
+    logger.info(f'Loading BigGAN module from: {tf_model_path}')
     module = hub.Module(tf_model_path)
     inputs = {k: tf.placeholder(v.dtype, v.get_shape().as_list(), k)
               for k, v in module.get_input_info_dict().items()}
@@ -43,7 +43,7 @@ def extract_batch_norm_stats(tf_model_path, batch_norm_stats_path=None):
     stacks = sum(((i*10 + 1, i*10 + 3, i*10 + 6, i*10 + 8) for i in range(50)), ())
     numpy_stacks = []
     for i in stacks:
-        logger.info("Retrieving module_apply_default/stack_{}".format(i))
+        logger.info(f"Retrieving module_apply_default/stack_{i}")
         try:
             stack_var = tf.get_default_graph().get_tensor_by_name("module_apply_default/stack_%d:0" % i)
         except KeyError:
@@ -79,37 +79,57 @@ def build_tf_to_pytorch_map(model, config):
             for name in ('offset', 'scale'):
                 sub_module_str = batch_str + name + "/"
                 sub_module_pnt = getattr(batch_pnt, name)
-                tf_to_pt_map.update({sub_module_str + "w/ema_0.9999": sub_module_pnt.weight_orig,
-                                     sub_module_str + "u0": sub_module_pnt.weight_u})
+                tf_to_pt_map.update(
+                    {
+                        f"{sub_module_str}w/ema_0.9999": sub_module_pnt.weight_orig,
+                        f"{sub_module_str}u0": sub_module_pnt.weight_u,
+                    }
+                )
         for i in range(4):  # Convolutions
             conv_str = layer_str + "conv%d/" % i
             conv_pnt = getattr(layer_pnt, 'conv_%d' % i)
-            tf_to_pt_map.update({conv_str + "b/ema_0.9999": conv_pnt.bias,
-                                 conv_str + "w/ema_0.9999": conv_pnt.weight_orig,
-                                 conv_str + "u0": conv_pnt.weight_u})
+            tf_to_pt_map.update(
+                {
+                    f"{conv_str}b/ema_0.9999": conv_pnt.bias,
+                    f"{conv_str}w/ema_0.9999": conv_pnt.weight_orig,
+                    f"{conv_str}u0": conv_pnt.weight_u,
+                }
+            )
         model_layer_idx += 1
 
     # Attention block
     layer_str = "Generator/attention/"
     layer_pnt = model.generator.layers[config.attention_layer_position]
-    tf_to_pt_map.update({layer_str + "gamma/ema_0.9999": layer_pnt.gamma})
+    tf_to_pt_map[f"{layer_str}gamma/ema_0.9999"] = layer_pnt.gamma
     for pt_name, tf_name in zip(['snconv1x1_g', 'snconv1x1_o_conv', 'snconv1x1_phi', 'snconv1x1_theta'],
                                 ['g/', 'o_conv/', 'phi/', 'theta/']):
         sub_module_str = layer_str + tf_name
         sub_module_pnt = getattr(layer_pnt, pt_name)
-        tf_to_pt_map.update({sub_module_str + "w/ema_0.9999": sub_module_pnt.weight_orig,
-                             sub_module_str + "u0": sub_module_pnt.weight_u})
+        tf_to_pt_map.update(
+            {
+                f"{sub_module_str}w/ema_0.9999": sub_module_pnt.weight_orig,
+                f"{sub_module_str}u0": sub_module_pnt.weight_u,
+            }
+        )
 
     # final batch norm and conv to rgb
     layer_str = "Generator/BatchNorm/"
     layer_pnt = model.generator.bn
-    tf_to_pt_map.update({layer_str + "offset/ema_0.9999": layer_pnt.bias,
-                         layer_str + "scale/ema_0.9999": layer_pnt.weight})
+    tf_to_pt_map.update(
+        {
+            f"{layer_str}offset/ema_0.9999": layer_pnt.bias,
+            f"{layer_str}scale/ema_0.9999": layer_pnt.weight,
+        }
+    )
     layer_str = "Generator/conv_to_rgb/"
     layer_pnt = model.generator.conv_to_rgb
-    tf_to_pt_map.update({layer_str + "b/ema_0.9999": layer_pnt.bias,
-                         layer_str + "w/ema_0.9999": layer_pnt.weight_orig,
-                         layer_str + "u0": layer_pnt.weight_u})
+    tf_to_pt_map.update(
+        {
+            f"{layer_str}b/ema_0.9999": layer_pnt.bias,
+            f"{layer_str}w/ema_0.9999": layer_pnt.weight_orig,
+            f"{layer_str}u0": layer_pnt.weight_u,
+        }
+    )
     return tf_to_pt_map
 
 
@@ -123,7 +143,7 @@ def load_tf_weights_in_biggan(model, config, tf_model_path, batch_norm_stats_pat
         raise ImportError("Loading a TensorFlow models in PyTorch, requires TensorFlow to be installed. Please see "
             "https://www.tensorflow.org/install/ for installation instructions.")
     # Load weights from TF model
-    checkpoint_path = tf_model_path + "/variables/variables"
+    checkpoint_path = f"{tf_model_path}/variables/variables"
     init_vars = tf.train.list_variables(checkpoint_path)
     from pprint import pprint
     pprint(init_vars)
@@ -157,10 +177,10 @@ def load_tf_weights_in_biggan(model, config, tf_model_path, batch_norm_stats_pat
             elif pointer.dim() == 4:  # Convolutions
                 array = np.transpose(array, (3, 2, 0, 1))
             else:
-                raise "Wrong dimensions to adjust: " + str((pointer.shape, array.shape))
+                raise f"Wrong dimensions to adjust: {(pointer.shape, array.shape)}"
             if pointer.shape != array.shape:
-                raise ValueError("Wrong dimensions: " + str((pointer.shape, array.shape)))
-            logger.info("Initialize PyTorch weight {} with shape {}".format(name, pointer.shape))
+                raise ValueError(f"Wrong dimensions: {(pointer.shape, array.shape)}")
+            logger.info(f"Initialize PyTorch weight {name} with shape {pointer.shape}")
             pointer.data = torch.from_numpy(array) if isinstance(array, np.ndarray) else torch.tensor(array)
             tf_weights.pop(name, None)
             pt_params_pnt.add(pointer.data_ptr())
@@ -190,13 +210,13 @@ def load_tf_weights_in_biggan(model, config, tf_model_path, batch_norm_stats_pat
                 bn_pointer = getattr(layer, 'bn_%d' % i)
                 pointer = bn_pointer.running_means
                 if pointer.shape != stats[index].shape:
-                    raise "Wrong dimensions: " + str((pointer.shape, stats[index].shape))
+                    raise f"Wrong dimensions: {(pointer.shape, stats[index].shape)}"
                 pointer.data = torch.from_numpy(stats[index])
                 pt_params_pnt.add(pointer.data_ptr())
 
                 pointer = bn_pointer.running_vars
                 if pointer.shape != stats[index+1].shape:
-                    raise "Wrong dimensions: " + str((pointer.shape, stats[index].shape))
+                    raise f"Wrong dimensions: {(pointer.shape, stats[index].shape)}"
                 pointer.data = torch.from_numpy(stats[index+1])
                 pt_params_pnt.add(pointer.data_ptr())
 
@@ -205,21 +225,28 @@ def load_tf_weights_in_biggan(model, config, tf_model_path, batch_norm_stats_pat
         bn_pointer = model.generator.bn
         pointer = bn_pointer.running_means
         if pointer.shape != stats[index].shape:
-            raise "Wrong dimensions: " + str((pointer.shape, stats[index].shape))
+            raise f"Wrong dimensions: {(pointer.shape, stats[index].shape)}"
         pointer.data = torch.from_numpy(stats[index])
         pt_params_pnt.add(pointer.data_ptr())
 
         pointer = bn_pointer.running_vars
         if pointer.shape != stats[index+1].shape:
-            raise "Wrong dimensions: " + str((pointer.shape, stats[index].shape))
+            raise f"Wrong dimensions: {(pointer.shape, stats[index].shape)}"
         pointer.data = torch.from_numpy(stats[index+1])
         pt_params_pnt.add(pointer.data_ptr())
 
-    remaining_params = list(n for n, t in chain(model.named_parameters(), model.named_buffers()) \
-                            if t.data_ptr() not in pt_params_pnt)
+    remaining_params = [
+        n
+        for n, t in chain(model.named_parameters(), model.named_buffers())
+        if t.data_ptr() not in pt_params_pnt
+    ]
 
-    logger.info("TF Weights not copied to PyTorch model: {} -".format(', '.join(tf_weights.keys())))
-    logger.info("Remanining parameters/buffers from PyTorch model: {} -".format(', '.join(remaining_params)))
+    logger.info(
+        f"TF Weights not copied to PyTorch model: {', '.join(tf_weights.keys())} -"
+    )
+    logger.info(
+        f"Remanining parameters/buffers from PyTorch model: {', '.join(remaining_params)} -"
+    )
 
     return model
 
@@ -302,9 +329,9 @@ def main():
     model_save_path = os.path.join(args.pt_save_path, WEIGHTS_NAME)
     config_save_path = os.path.join(args.pt_save_path, CONFIG_NAME)
 
-    logger.info("Save model dump to {}".format(model_save_path))
+    logger.info(f"Save model dump to {model_save_path}")
     torch.save(model.state_dict(), model_save_path)
-    logger.info("Save configuration file to {}".format(config_save_path))
+    logger.info(f"Save configuration file to {config_save_path}")
     with open(config_save_path, "w", encoding="utf-8") as f:
         f.write(config.to_json_string())
 

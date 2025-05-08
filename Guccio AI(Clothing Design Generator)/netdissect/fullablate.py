@@ -153,13 +153,13 @@ def main():
     classnum = labelnum_from_name[classname]
 
     # Get iou ranking from dissect.json
-    iou_rankname = '%s-%s' % (classname, 'iou')
+    iou_rankname = f'{classname}-iou'
     dissect_layer = {lrec.layer: lrec for lrec in dissection.layers}
     iou_ranking = next(r for r in dissect_layer[layername].rankings
                 if r.name == iou_rankname)
 
     # Get trained ranking from summary.json
-    rankname = '%s-%s' % (classname, args.metric)
+    rankname = f'{classname}-{args.metric}'
     summary_layer = {lrec.layer: lrec for lrec in summary.layers}
     ranking = next(r for r in summary_layer[layername].rankings
                 if r.name == rankname)
@@ -177,7 +177,7 @@ def main():
             ordering[:args.unitcount], values[:args.unitcount])
     measurements = measurements.cpu().numpy().tolist()
     os.makedirs(ablationdir, exist_ok=True)
-    with open(os.path.join(ablationdir, '%s.json'%rankname), 'w') as f:
+    with open(os.path.join(ablationdir, f'{rankname}.json'), 'w') as f:
         json.dump(dict(
             classname=classname,
             classnum=classnum,
@@ -204,7 +204,7 @@ def measure_full_ablation(segmenter, loader, model, classnum, layer,
     with torch.no_grad():
         for l in model.ablation:
             model.ablation[l] = None
-        for i, [ibz] in enumerate(progress(loader)):
+        for [ibz] in progress(loader):
             ibz = ibz.cuda()
             for num_units in progress(range(len(ordering) + 1)):
                 ablation = torch.zeros(feature_units, device=device)
@@ -221,15 +221,14 @@ def count_segments(segmenter, loader, model):
     total_bincount = 0
     data_size = 0
     progress = default_progress()
-    for i, batch in enumerate(progress(loader)):
+    for _ in progress(loader):
         tensor_images = model(z_batch.to(device))
         seg = segmenter.segment_batch(tensor_images, downsample=2)
         bc = (seg + index[:, None, None, None] * self.num_classes).view(-1
                 ).bincount(minlength=z_batch.shape[0] * self.num_classes)
         data_size += seg.shape[0] * seg.shape[2] * seg.shape[3]
         total_bincount += batch_label_counts.float().sum(0)
-    normalized_bincount = total_bincount / data_size
-    return normalized_bincount
+    return total_bincount / data_size
 
 if __name__ == '__main__':
     main()

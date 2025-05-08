@@ -92,18 +92,20 @@ class RunningTopK:
 
     def state_dict(self):
         return dict(
-                constructor=self.__module__ + '.' +
-                    self.__class__.__name__ + '()',
-                k=self.k,
-                count=self.count,
-                data_shape=tuple(self.data_shape),
-                top_data=self.top_data.cpu().numpy(),
-                top_index=self.top_index.cpu().numpy(),
-                next=self.next,
-                linear_index=(self.linear_index.cpu().numpy()
-                    if isinstance(self.linear_index, torch.Tensor)
-                    else self.linear_index),
-                perm=self.perm)
+            constructor=f'{self.__module__}.{self.__class__.__name__}()',
+            k=self.k,
+            count=self.count,
+            data_shape=tuple(self.data_shape),
+            top_data=self.top_data.cpu().numpy(),
+            top_index=self.top_index.cpu().numpy(),
+            next=self.next,
+            linear_index=(
+                self.linear_index.cpu().numpy()
+                if isinstance(self.linear_index, torch.Tensor)
+                else self.linear_index
+            ),
+            perm=self.perm,
+        )
 
     def set_state_dict(self, dic):
         self.k = dic['k'].item()
@@ -264,17 +266,18 @@ class RunningQuantile:
 
     def state_dict(self):
         return dict(
-                constructor=self.__module__ + '.' +
-                    self.__class__.__name__ + '()',
-                resolution=self.resolution,
-                depth=self.depth,
-                buffersize=self.buffersize,
-                samplerate=self.samplerate,
-                data=[d.cpu().numpy()[:,:f].T
-                    for d, f in zip(self.data, self.firstfree)],
-                sizes=[d.shape[1] for d in self.data],
-                extremes=self.extremes.cpu().numpy(),
-                size=self.size)
+            constructor=f'{self.__module__}.{self.__class__.__name__}()',
+            resolution=self.resolution,
+            depth=self.depth,
+            buffersize=self.buffersize,
+            samplerate=self.samplerate,
+            data=[
+                d.cpu().numpy()[:, :f].T for d, f in zip(self.data, self.firstfree)
+            ],
+            sizes=[d.shape[1] for d in self.data],
+            extremes=self.extremes.cpu().numpy(),
+            size=self.size,
+        )
 
     def set_state_dict(self, dic):
         self.resolution = int(dic['resolution'])
@@ -368,7 +371,7 @@ class RunningQuantile:
         weights = torch.FloatTensor(size) # Floating point
         summary = torch.zeros(self.depth, size,
                 dtype=self.dtype, device=self.device)
-        weights[0:2] = 0
+        weights[:2] = 0
         summary[:,0:2] = self.extremes
         index = 2
         for level, ff in enumerate(self.firstfree):
@@ -538,10 +541,10 @@ class RunningConditionalQuantile:
     def state_dict(self):
         conditions = sorted(self.running_quantiles.keys())
         result = dict(
-                constructor=self.__module__ + '.' +
-                    self.__class__.__name__ + '()',
-                rq_args=self.rq_args,
-                conditions=conditions)
+            constructor=f'{self.__module__}.{self.__class__.__name__}()',
+            rq_args=self.rq_args,
+            conditions=conditions,
+        )
         for i, c in enumerate(conditions):
             result.update({
                 '%d.%s' % (i, k): v
@@ -658,14 +661,14 @@ class RunningCrossCovariance:
 
     def state_dict(self):
         return dict(
-                constructor=self.__module__ + '.' +
-                    self.__class__.__name__ + '()',
-                count=self.count,
-                mean_a=self._mean[0].cpu().numpy(),
-                mean_b=self._mean[1].cpu().numpy(),
-                cmom2_a=self.v_cmom2[0].cpu().numpy(),
-                cmom2_b=self.v_cmom2[1].cpu().numpy(),
-                cmom2=self.cmom2.cpu().numpy())
+            constructor=f'{self.__module__}.{self.__class__.__name__}()',
+            count=self.count,
+            mean_a=self._mean[0].cpu().numpy(),
+            mean_b=self._mean[1].cpu().numpy(),
+            cmom2_a=self.v_cmom2[0].cpu().numpy(),
+            cmom2_b=self.v_cmom2[1].cpu().numpy(),
+            cmom2=self.cmom2.cpu().numpy(),
+        )
 
     def set_state_dict(self, dic):
         self.count = dic['count'].item()
@@ -733,7 +736,7 @@ if __name__ == '__main__':
     # numpy.savez('foo.npz', **saved)
     # saved = numpy.load('foo.npz')
     qc = RunningQuantile(state=saved)
-    assert not qc.device.type == 'cuda'
+    assert qc.device.type != 'cuda'
     qc.add(alldata)
     actual_sum *= 2
     ro = qc.readout(1001).cpu()

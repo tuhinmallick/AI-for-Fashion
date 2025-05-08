@@ -17,24 +17,22 @@ from torch.utils.ffi import create_extension
 headers = []
 sources = []
 defines = []
-extra_objects = []
 with_cuda = False
 
-if torch.cuda.is_available():
-    with_cuda = True
-
-    headers+= ['src/prroi_pooling_gpu.h']
-    sources += ['src/prroi_pooling_gpu.c']
-    defines += [('WITH_CUDA', None)]
-
-    this_file = os.path.dirname(os.path.realpath(__file__))
-    extra_objects_cuda = ['src/prroi_pooling_gpu_impl.cu.o']
-    extra_objects_cuda = [os.path.join(this_file, fname) for fname in extra_objects_cuda]
-    extra_objects.extend(extra_objects_cuda)
-else:
+if not torch.cuda.is_available():
     # TODO(Jiayuan Mao @ 07/13): remove this restriction after we support the cpu implementation.
     raise NotImplementedError('Precise RoI Pooling only supports GPU (cuda) implememtations.')
 
+with_cuda = True
+
+headers+= ['src/prroi_pooling_gpu.h']
+sources += ['src/prroi_pooling_gpu.c']
+defines += [('WITH_CUDA', None)]
+
+this_file = os.path.dirname(os.path.realpath(__file__))
+extra_objects_cuda = ['src/prroi_pooling_gpu_impl.cu.o']
+extra_objects_cuda = [os.path.join(this_file, fname) for fname in extra_objects_cuda]
+extra_objects = list(extra_objects_cuda)
 ffi = create_extension(
     '_prroi_pooling',
     headers=headers,

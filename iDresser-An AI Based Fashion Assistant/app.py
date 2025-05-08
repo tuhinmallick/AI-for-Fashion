@@ -26,20 +26,10 @@ def extract_features(img_path,model):
     expanded_img_array = np.expand_dims(img_array, axis=0)
     preprocessed_img = preprocess_input(expanded_img_array)
     result = model.predict(preprocessed_img).flatten()
-    normalized_result = result / norm(result)
+    return result / norm(result)
 
-    return normalized_result
-
-filenames = []
-
-for file in os.listdir('images'):
-   filenames.append(os.path.join('images', file))
-
-feature_list = []
-
-for file in tqdm(filenames):
-    feature_list.append(extract_features(file, model))
-
+filenames = [os.path.join('images', file) for file in os.listdir('images')]
+feature_list = [extract_features(file, model) for file in tqdm(filenames)]
 pickle.dump(feature_list, open('embeddings.pkl', 'wb'))
 pickle.dump(filenames, open('filenames.pkl', 'wb'))
 

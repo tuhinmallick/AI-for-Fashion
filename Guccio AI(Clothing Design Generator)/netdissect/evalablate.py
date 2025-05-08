@@ -140,23 +140,22 @@ def main():
         post_progress(c=classname)
         for layername in progress(model.ablation):
             post_progress(l=layername)
-            rankname = '%s-%s' % (classname, args.metric)
+            rankname = f'{classname}-{args.metric}'
             classnum = labelnum_from_name[classname]
             try:
                 ranking = next(r for r in dissect_layer[layername].rankings
                         if r.name == rankname)
             except:
-                print('%s not found' % rankname)
+                print(f'{rankname} not found')
                 sys.exit(1)
             ordering = numpy.argsort(ranking.score)
             # Check if already done
             ablationdir = os.path.join(args.outdir, layername, 'pixablation')
-            if os.path.isfile(os.path.join(ablationdir, '%s.json'%rankname)):
-                with open(os.path.join(ablationdir, '%s.json'%rankname)) as f:
+            if os.path.isfile(os.path.join(ablationdir, f'{rankname}.json')):
+                with open(os.path.join(ablationdir, f'{rankname}.json')) as f:
                     data = EasyDict(json.load(f))
                 # If the unit ordering is not the same, something is wrong
-                if not all(a == o
-                        for a, o in zip(data.ablation_units, ordering)):
+                if any(a != o for a, o in zip(data.ablation_units, ordering)):
                     continue
                 if len(data.ablation_effects) >= args.unitcount:
                     continue # file already done.
@@ -165,7 +164,7 @@ def main():
                     model, classnum, layername, ordering[:args.unitcount])
             measurements = measurements.cpu().numpy().tolist()
             os.makedirs(ablationdir, exist_ok=True)
-            with open(os.path.join(ablationdir, '%s.json'%rankname), 'w') as f:
+            with open(os.path.join(ablationdir, f'{rankname}.json'), 'w') as f:
                 json.dump(dict(
                     classname=classname,
                     classnum=classnum,
@@ -234,15 +233,14 @@ def count_segments(segmenter, loader, model):
     total_bincount = 0
     data_size = 0
     progress = default_progress()
-    for i, batch in enumerate(progress(loader)):
+    for _ in progress(loader):
         tensor_images = model(z_batch.to(device))
         seg = segmenter.segment_batch(tensor_images, downsample=2)
         bc = (seg + index[:, None, None, None] * self.num_classes).view(-1
                 ).bincount(minlength=z_batch.shape[0] * self.num_classes)
         data_size += seg.shape[0] * seg.shape[2] * seg.shape[3]
         total_bincount += batch_label_counts.float().sum(0)
-    normalized_bincount = total_bincount / data_size
-    return normalized_bincount
+    return total_bincount / data_size
 
 if __name__ == '__main__':
     main()

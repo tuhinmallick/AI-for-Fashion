@@ -19,8 +19,7 @@ class SegmentationModuleBase(nn.Module):
         valid = (label != ignore_index).long()
         acc_sum = torch.sum(valid * (preds == label).long())
         pixel_sum = torch.sum(valid)
-        acc = acc_sum.float() / (pixel_sum.float() + 1e-10)
-        return acc
+        return acc_sum.float() / (pixel_sum.float() + 1e-10)
 
     @staticmethod
     def part_pixel_acc(pred_part, gt_seg_part, gt_seg_object, object_label, valid):
@@ -92,17 +91,22 @@ class SegmentationModule(SegmentationModuleBase):
             if pred['object'] is not None:  # object
                 loss_dict['object'] = self.crit_dict['object'](pred['object'], feed_dict['seg_object'])
             if pred['part'] is not None:  # part
-                part_loss = 0
-                for idx_part, object_label in enumerate(self.object_with_part):
-                    part_loss += self.part_loss(
-                        pred['part'][idx_part], feed_dict['seg_part'],
-                        feed_dict['seg_object'], object_label, feed_dict['valid_part'][:, idx_part])
+                part_loss = sum(
+                    self.part_loss(
+                        pred['part'][idx_part],
+                        feed_dict['seg_part'],
+                        feed_dict['seg_object'],
+                        object_label,
+                        feed_dict['valid_part'][:, idx_part],
+                    )
+                    for idx_part, object_label in enumerate(self.object_with_part)
+                )
                 loss_dict['part'] = part_loss
             if pred['scene'] is not None:  # scene
                 loss_dict['scene'] = self.crit_dict['scene'](pred['scene'], feed_dict['scene_label'])
             if pred['material'] is not None:  # material
                 loss_dict['material'] = self.crit_dict['material'](pred['material'], feed_dict['seg_material'])
-            loss_dict['total'] = sum([loss_dict[k] * self.loss_scale[k] for k in loss_dict.keys()])
+            loss_dict['total'] = sum(loss_dict[k] * self.loss_scale[k] for k in loss_dict)
 
             # metric 
             metric_dict= {}
@@ -128,9 +132,11 @@ class SegmentationModule(SegmentationModuleBase):
             return {'metric': metric_dict, 'loss': loss_dict}
         else: # inference
             output_switch = {"object": True, "part": True, "scene": True, "material": True}
-            pred = self.decoder(self.encoder(feed_dict['img'], return_feature_maps=True),
-                                output_switch=output_switch, seg_size=seg_size)
-            return pred
+            return self.decoder(
+                self.encoder(feed_dict['img'], return_feature_maps=True),
+                output_switch=output_switch,
+                seg_size=seg_size,
+            )
 
 
 def conv3x3(in_planes, out_planes, stride=1, has_bias=False):
@@ -164,21 +170,13 @@ class ModelBuilder:
         #    m.weight.data.normal_(0.0, 0.0001)
 
     def build_encoder(self, arch='resnet50_dilated8', fc_dim=512, weights=''):
-        pretrained = True if len(weights) == 0 else False
+        pretrained = len(weights) == 0
         if arch == 'resnet34':
             raise NotImplementedError
-            orig_resnet = resnet.__dict__['resnet34'](pretrained=pretrained)
-            net_encoder = Resnet(orig_resnet)
         elif arch == 'resnet34_dilated8':
             raise NotImplementedError
-            orig_resnet = resnet.__dict__['resnet34'](pretrained=pretrained)
-            net_encoder = ResnetDilated(orig_resnet,
-                                        dilate_scale=8)
         elif arch == 'resnet34_dilated16':
             raise NotImplementedError
-            orig_resnet = resnet.__dict__['resnet34'](pretrained=pretrained)
-            net_encoder = ResnetDilated(orig_resnet,
-                                        dilate_scale=16)
         elif arch == 'resnet50':
             orig_resnet = resnet.__dict__['resnet50'](pretrained=pretrained)
             net_encoder = Resnet(orig_resnet)
@@ -245,21 +243,21 @@ class Resnet(nn.Module):
         self.layer4 = orig_resnet.layer4
 
     def forward(self, x, return_feature_maps=False):
-        conv_out = []
-
         x = self.relu1(self.bn1(self.conv1(x)))
         x = self.relu2(self.bn2(self.conv2(x)))
         x = self.relu3(self.bn3(self.conv3(x)))
         x = self.maxpool(x)
 
-        x = self.layer1(x); conv_out.append(x);
-        x = self.layer2(x); conv_out.append(x);
-        x = self.layer3(x); conv_out.append(x);
-        x = self.layer4(x); conv_out.append(x);
+        x = self.layer1(x)
+        conv_out = [x]
+        x = self.layer2(x)
+        conv_out.append(x);
+        x = self.layer3(x)
+        conv_out.append(x);
+        x = self.layer4(x)
+        conv_out.append(x);
 
-        if return_feature_maps:
-            return conv_out
-        return [x]
+        return conv_out if return_feature_maps else [x]
 
 
 # upernet
@@ -290,26 +288,30 @@ class UPerNet(nn.Module):
 
         # FPN Module
         self.fpn_in = []
-        for fpn_inplane in fpn_inplanes[:-1]: # skip the top layer
-            self.fpn_in.append(nn.Sequential(
+        self.fpn_in.extend(
+            nn.Sequential(
                 nn.Conv2d(fpn_inplane, fpn_dim, kernel_size=1, bias=False),
                 SynchronizedBatchNorm2d(fpn_dim),
-                nn.ReLU(inplace=True)
-            ))
+                nn.ReLU(inplace=True),
+            )
+            for fpn_inplane in fpn_inplanes[:-1]
+        )
         self.fpn_in = nn.ModuleList(self.fpn_in)
 
         self.fpn_out = []
-        for i in range(len(fpn_inplanes) - 1): # skip the top layer
-            self.fpn_out.append(nn.Sequential(
+        self.fpn_out.extend(
+            nn.Sequential(
                 conv3x3_bn_relu(fpn_dim, fpn_dim, 1),
-            ))
+            )
+            for _ in range(len(fpn_inplanes) - 1)
+        )
         self.fpn_out = nn.ModuleList(self.fpn_out)
 
         self.conv_fusion = conv3x3_bn_relu(len(fpn_inplanes) * fpn_dim, fpn_dim, 1)
 
         # background included. if ignore in loss, output channel 0 will not be trained.
         self.nr_scene_class, self.nr_object_class, self.nr_part_class, self.nr_material_class = \
-            nr_classes['scene'], nr_classes['object'], nr_classes['part'], nr_classes['material']
+                nr_classes['scene'], nr_classes['object'], nr_classes['part'], nr_classes['material']
 
         # input: PPM out, input_dim: fpn_dim
         self.scene_head = nn.Sequential(
@@ -343,16 +345,23 @@ class UPerNet(nn.Module):
         conv5 = conv_out[-1]
         input_size = conv5.size()
         ppm_out = [conv5]
-        roi = [] # fake rois, just used for pooling
-        for i in range(input_size[0]): # batch size
-            roi.append(torch.Tensor([i, 0, 0, input_size[3], input_size[2]]).view(1, -1)) # b, x0, y0, x1, y1
+        roi = [
+            torch.Tensor([i, 0, 0, input_size[3], input_size[2]]).view(1, -1)
+            for i in range(input_size[0])
+        ]
         roi = torch.cat(roi, dim=0).type_as(conv5)
         ppm_out = [conv5]
-        for pool_scale, pool_conv in zip(self.ppm_pooling, self.ppm_conv):
-            ppm_out.append(pool_conv(F.interpolate(
-                pool_scale(conv5, roi.detach()),
-                (input_size[2], input_size[3]),
-                mode='bilinear', align_corners=False)))
+        ppm_out.extend(
+            pool_conv(
+                F.interpolate(
+                    pool_scale(conv5, roi.detach()),
+                    (input_size[2], input_size[3]),
+                    mode='bilinear',
+                    align_corners=False,
+                )
+            )
+            for pool_scale, pool_conv in zip(self.ppm_pooling, self.ppm_conv)
+        )
         ppm_out = torch.cat(ppm_out, 1)
         f = self.ppm_last_conv(ppm_out)
 
@@ -372,25 +381,29 @@ class UPerNet(nn.Module):
                 fpn_feature_list.append(self.fpn_out[i](f))
             fpn_feature_list.reverse() # [P2 - P5]
 
-            # material
-            if output_switch['material']:
-                output_dict['material'] = self.material_head(fpn_feature_list[0])
+        # material
+        if output_switch['material']:
+            output_dict['material'] = self.material_head(fpn_feature_list[0])
 
-            if output_switch['object'] or output_switch['part']:
-                output_size = fpn_feature_list[0].size()[2:]
-                fusion_list = [fpn_feature_list[0]]
-                for i in range(1, len(fpn_feature_list)):
-                    fusion_list.append(F.interpolate(
-                        fpn_feature_list[i],
-                        output_size,
-                        mode='bilinear', align_corners=False))
-                fusion_out = torch.cat(fusion_list, 1)
-                x = self.conv_fusion(fusion_out)
+        if output_switch['object'] or output_switch['part']:
+            output_size = fpn_feature_list[0].size()[2:]
+            fusion_list = [fpn_feature_list[0]]
+            fusion_list.extend(
+                F.interpolate(
+                    fpn_feature_list[i],
+                    output_size,
+                    mode='bilinear',
+                    align_corners=False,
+                )
+                for i in range(1, len(fpn_feature_list))
+            )
+            fusion_out = torch.cat(fusion_list, 1)
+            x = self.conv_fusion(fusion_out)
 
-                if output_switch['object']: # object
-                    output_dict['object'] = self.object_head(x)
-                if output_switch['part']:
-                    output_dict['part'] = self.part_head(x)
+        if output_switch['object']: # object
+            output_dict['object'] = self.object_head(x)
+        if output_switch['part']:
+            output_dict['part'] = self.part_head(x)
 
         if self.use_softmax:  # is True during inference
             # inference scene
@@ -410,7 +423,7 @@ class UPerNet(nn.Module):
             x = output_dict['part']
             x = F.interpolate(x, size=seg_size, mode='bilinear', align_corners=False)
             part_pred_list, head = [], 0
-            for idx_part, object_label in enumerate(self.object_with_part):
+            for object_label in self.object_with_part:
                 n_part = len(self.object_part[object_label])
                 _x = F.interpolate(x[:, head: head + n_part], size=seg_size, mode='bilinear', align_corners=False)
                 _x = F.softmax(_x, dim=1)
@@ -430,7 +443,7 @@ class UPerNet(nn.Module):
                 output_dict[k] = x
             if output_dict['part'] is not None:
                 part_pred_list, head = [], 0
-                for idx_part, object_label in enumerate(self.object_with_part):
+                for object_label in self.object_with_part:
                     n_part = len(self.object_part[object_label])
                     x = output_dict['part'][:, head: head + n_part]
                     x = F.log_softmax(x, dim=1)

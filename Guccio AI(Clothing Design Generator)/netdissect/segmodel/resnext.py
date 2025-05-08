@@ -107,12 +107,11 @@ class ResNeXt(nn.Module):
                 SynchronizedBatchNorm2d(planes * block.expansion),
             )
 
-        layers = []
-        layers.append(block(self.inplanes, planes, stride, groups, downsample))
+        layers = [block(self.inplanes, planes, stride, groups, downsample)]
         self.inplanes = planes * block.expansion
-        for i in range(1, blocks):
-            layers.append(block(self.inplanes, planes, groups=groups))
-
+        layers.extend(
+            block(self.inplanes, planes, groups=groups) for _ in range(1, blocks)
+        )
         return nn.Sequential(*layers)
 
     def forward(self, x):
@@ -177,6 +176,6 @@ def load_url(url, model_dir='./pretrained', map_location=None):
     filename = url.split('/')[-1]
     cached_file = os.path.join(model_dir, filename)
     if not os.path.exists(cached_file):
-        sys.stderr.write('Downloading: "{}" to {}\n'.format(url, cached_file))
+        sys.stderr.write(f'Downloading: "{url}" to {cached_file}\n')
         urlretrieve(url, cached_file)
     return torch.load(cached_file, map_location=map_location)

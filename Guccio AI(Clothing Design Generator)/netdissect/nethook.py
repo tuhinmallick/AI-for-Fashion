@@ -161,7 +161,7 @@ class InstrumentedModel(torch.nn.Module):
                 aka = aka_map[name]
                 self._hook_layer(layer, name, aka)
         for name in needed:
-            raise ValueError('Layer %s not found in model' % name)
+            raise ValueError(f'Layer {name} not found in model')
 
     def _hook_layer(self, layer, layername, aka):
         '''
@@ -169,9 +169,9 @@ class InstrumentedModel(torch.nn.Module):
         intercepts the call, and tracks the hook so that it can be reverted.
         '''
         if aka in self._hooked_layer:
-            raise ValueError('Layer %s already hooked' % aka)
+            raise ValueError(f'Layer {aka} already hooked')
         if layername in self._old_forward:
-            raise ValueError('Layer %s already hooked' % layername)
+            raise ValueError(f'Layer {layername} already hooked')
         self._hooked_layer[aka] = layername
         self._old_forward[layername] = (layer, aka,
                 layer.__dict__.get('forward', None))
@@ -181,6 +181,7 @@ class InstrumentedModel(torch.nn.Module):
             original_x = original_forward(*inputs, **kwargs)
             x = editor._postprocess_forward(original_x, aka)
             return x
+
         layer.forward = types.MethodType(new_forward, layer)
 
     def _unhook_layer(self, aka):
@@ -252,14 +253,14 @@ def make_matching_tensor(valuedict, name, data):
         # Accept non-torch data.
         v = torch.from_numpy(numpy.array(v))
         valuedict[name] = v
-    if not v.device == data.device or not v.dtype == data.dtype:
+    if v.device != data.device or v.dtype != data.dtype:
         # Ensure device and type matches.
-        assert not v.requires_grad, '%s wrong device or type' % (name)
+        assert not v.requires_grad, f'{name} wrong device or type'
         v = v.to(device=data.device, dtype=data.dtype)
         valuedict[name] = v
     if len(v.shape) < len(data.shape):
         # Ensure dimensions are unsqueezed as needed.
-        assert not v.requires_grad, '%s wrong dimensions' % (name)
+        assert not v.requires_grad, f'{name} wrong dimensions'
         v = v.view((1,) + tuple(v.shape) +
                 (1,) * (len(data.shape) - len(v.shape) - 1))
         valuedict[name] = v

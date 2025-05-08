@@ -53,19 +53,19 @@ def create_instrumented_model(args, **kwargs):
     if getattr(args, 'pthfile', None) is not None:
         data = torch.load(args.pthfile)
         if 'state_dict' in data:
-            meta = {}
-            for key in data:
-                if isinstance(data[key], numbers.Number):
-                    meta[key] = data[key]
+            meta = {
+                key: data[key]
+                for key in data
+                if isinstance(data[key], numbers.Number)
+            }
             data = data['state_dict']
         submodule = getattr(args, 'submodule', None)
         if submodule is not None and len(submodule):
-            remove_prefix = submodule + '.'
+            remove_prefix = f'{submodule}.'
             data = { k[len(remove_prefix):]: v for k, v in data.items()
                     if k.startswith(remove_prefix)}
             if not len(data):
-                print_progress('No submodule %s found in %s' %
-                        (submodule, args.pthfile))
+                print_progress(f'No submodule {submodule} found in {args.pthfile}')
                 return None
         model.load_state_dict(data, strict=not getattr(args, 'unstrict', False))
 
@@ -78,7 +78,7 @@ def create_instrumented_model(args, **kwargs):
         prefix = ''
         while len(list(container.named_children())) == 1:
             name, container = next(container.named_children())
-            prefix += name + '.'
+            prefix += f'{name}.'
         # Default to all nontrivial top-level layers except last.
         args.layers = [prefix + name
                 for name, module in container.named_children()
@@ -88,7 +88,7 @@ def create_instrumented_model(args, **kwargs):
                     # Skip pooling layers.
                     'torch.nn.modules.pooling']
                 ][:-1]
-        print_progress('Defaulting to layers: %s' % ' '.join(args.layers))
+        print_progress(f"Defaulting to layers: {' '.join(args.layers)}")
 
     # Now wrap the model for instrumentation.
     model = InstrumentedModel(model)
